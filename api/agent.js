@@ -26,6 +26,7 @@ import { sessionStore } from './session-store.js';
 import { desdeFilaRun, lineasDeUbicacion, ubicacionEfectiva, aColumnas } from './location.js';
 import { crearRepoLeads } from './leads-repo.js';
 import { servidorDeLeads, NOMBRE_HERRAMIENTA as GUARDAR_LEADS } from './lead-tool.js';
+import { presupuestoDeRun, topeDeVuelta } from './topes.js';
 
 /* El repo de leads, para la herramienta `guardar_leads` (lead-tool.js). */
 const repoLeads = crearRepoLeads({ db });
@@ -254,6 +255,16 @@ function resumen(tool, input) {
 /* Drena una vuelta del agente. `arranque` distingue la primera ejecución de
    una reanudación tras aprobación: cambia el prompt y añade `resume`. */
 async function vuelta(run, arranque) {
+  /* Lo que queda del día, leído en CADA vuelta: una reanudación tras aprobar
+     no puede gastar su presupuesto entero si el día ya va casi lleno. */
+  const tope = topeDeVuelta(run.budget_usd, await presupuestoDelDia());
+  /* Día agotado: no se lanza. Nunca se pasa 0 al SDK (lo manda tal cual como
+     --max-budget-usd 0) y la reanudación tras aprobar no pasaba por comprobarTopes. */
+  if (tope <= 0) {
+    const e = new Error('presupuesto diario agotado');
+    e.code = 'budget_exhausted';
+    throw e;
+  }
   const opciones = {
     model: run.model,
     cwd: AGENT_CWD,
@@ -274,7 +285,7 @@ async function vuelta(run, arranque) {
        máquina (~/.claude). Lo que puede hacer se decide aquí y solo aquí. */
     settingSources: [],
     maxTurns: run.max_iterations,
-    maxBudgetUsd: Number(run.budget_usd),
+    maxBudgetUsd: tope,
     sessionStore,
     hooks: puerta(run.id),
     ...(arranque.resume ? { resume: arranque.resume } : {})
@@ -364,7 +375,7 @@ export async function crearRun({ prompt, area, model, budgetUsd, title, location
           VALUES ($1, $2, $3, $4, 'running', now(), $5, $6, $7, $8)
        RETURNING *`,
     [area || 'general', title || prompt.slice(0, 120), model || MODELO_DEFECTO,
-     Number(budgetUsd || 1), ...aColumnas(ubic)]);
+     presupuestoDeRun(budgetUsd), ...aColumnas(ubic)]);
   const run = rows[0];
 
   await evento(run.id, 'user', { text: prompt });
