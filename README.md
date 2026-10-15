@@ -1,110 +1,115 @@
 <div align="center">
 
-# 🛰️ Centro de mando
+# 🛰️ Command Center
 
-**Un panel con agentes de IA que *hacen* cosas por tu negocio (buscar clientes, preparar correos, vigilar tus automatizaciones), con tu aprobación para todo lo que sale al exterior y el coste medido en cada ejecución.**
+**A dashboard of AI agents that actually *do* things for your business (find leads, draft emails, watch your automations) — with your approval required for anything that leaves the building, and the cost measured on every run.**
 
-[![MIT License](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Claude Agent SDK](https://img.shields.io/badge/Claude-Agent%20SDK-D97757.svg)](docs/research/A-agent-sdk.md)
 [![React + Vite](https://img.shields.io/badge/React-Vite-61DAFB.svg)](web)
 [![Docs](https://img.shields.io/badge/docs-KEIZAC%20TECH-black.svg)](https://keizactech.com/docs)
 
-🚧 **En desarrollo activo.** La base, la autenticación, el runtime de agentes y la prospección de clientes funcionan; el correo y el envío vienen después.
+🚧 **Under active development.** The base, authentication, agent runtime and lead prospecting work today; email and sending come next.
 
 </div>
 
 ---
 
-## ✨ Qué hace
+## ✨ What it does
 
-- 💬 **Una caja de chat** donde le pides cosas a un orquestador (Claude) que reparte el trabajo entre subagentes.
-- ✋ **Aprobación humana obligatoria:** cualquier acción que salga al exterior se para y espera tu OK, aunque sean horas, y sobrevive a reinicios y redespliegues.
-- 💸 **Coste medido** en cada ejecución, con un **tope diario en dólares** que aplica el código, no el modelo.
-- 🎯 **Prospección de clientes** desde fuentes públicas (licencias de NYC Open Data) y Google Maps, con teléfonos normalizados y sin duplicados.
-- 🔌 **Conectado a n8n** para ver y disparar tus automatizaciones.
+- 💬 **One chat box** where you ask an orchestrator (Claude) for work, and it splits the job across subagents.
+- ✋ **Mandatory human approval:** any action that reaches the outside world stops and waits for your OK — even for hours — and survives restarts and redeploys.
+- 💸 **Cost measured** on every run, with a **daily dollar cap** enforced by the code, not by the model.
+- 🎯 **Lead prospecting** from public sources (NYC Open Data licenses) and Google Maps, with normalized phone numbers and no duplicates.
+- 🔌 **Connected to n8n** to see and trigger your automations.
 
-## 🧠 Cómo funciona
+> The UI and some internal docs are in Spanish; the code and this README are in English.
+
+## 🧠 How it works
 
 ```mermaid
 flowchart LR
-    U((Tú, desde el móvil)) --> W[Panel React]
-    W -->|SSE| A[API Node]
-    A --> O[Orquestador<br/>Claude]
-    O --> S1[Subagente<br/>investigador · Haiku]
-    O --> S2[Subagente<br/>leads · Sonnet]
-    O -.->|acción externa| AP{¿Apruebas?}
-    AP -->|sí| X[Ejecuta]
-    A --> DB[(Postgres<br/>run_event append-only)]
+    U((You, on your phone)) --> W[React dashboard]
+    W -->|SSE| A[Node API]
+    A --> O[Orchestrator<br/>Claude]
+    O --> S1[Subagent<br/>researcher · Haiku]
+    O --> S2[Subagent<br/>leads · Sonnet]
+    O -.->|external action| AP{Approve?}
+    AP -->|yes| X[Run it]
+    A --> DB[(Postgres<br/>append-only run_event)]
     A --> N[n8n]
 ```
 
-**Los tres invariantes del diseño** (`api/agent.js`):
-1. La fuente de verdad es `run_event`, *append-only*: si el proceso muere a mitad, se reanuda releyendo eventos.
-2. La aprobación se comprueba **en el servidor**, nunca confiando en que el prompt "recuerde" pedir permiso.
-3. Los topes de coste, iteraciones y presupuesto diario los aplica **el código**.
+**The three design invariants** (`api/agent.js`):
+1. The source of truth is `run_event`, *append-only*: if the process dies halfway, it resumes by replaying events.
+2. Approval is checked **on the server** — never by trusting the prompt to "remember" to ask.
+3. Cost, iteration and daily-budget caps are enforced **by the code**.
 
-| Carpeta | Qué hay |
+| Folder | What's inside |
 |---|---|
-| `api/` | API Node: agentes, aprobaciones, coste, leads, n8n, autenticación |
-| `api/sources/` | Fuentes de prospección (NYC Open Data, Google Maps) |
-| `web/` | Panel React + Vite, adaptado al móvil |
-| `db/migrations/` | Esquema de Postgres numerado |
-| `docs/` | Arquitectura, decisiones y **8 informes de investigación** con fuentes |
-| `spike/` | Experimentos que probaron que una aprobación diferida sobrevive a reinicios |
+| `api/` | Node API: agents, approvals, cost, leads, n8n, auth |
+| `api/sources/` | Prospecting sources (NYC Open Data, Google Maps) |
+| `web/` | React + Vite dashboard, mobile-friendly |
+| `db/migrations/` | Numbered Postgres schema |
+| `docs/` | Architecture, decisions and **8 research reports** with sources |
+| `spike/` | Experiments proving a deferred approval survives a restart |
 
-## 🚀 Arranque rápido
+## 🚀 Quick start
 
-**Necesitas:** Docker, un Postgres, un proyecto de Firebase (para el login) y una clave de Anthropic.
+**You need:** Docker, a Postgres database, a Firebase project (for login) and an Anthropic API key.
 
 ```bash
 git clone https://github.com/RosaritoRD/centro-de-mando.git
 cd centro-de-mando
-cp .env.example .env            # rellena cada valor (ver abajo)
+cp .env.example .env            # fill in every value (see below)
 docker compose up -d --build
-# Migraciones, con el rol dueño de la base de datos:
+# Migrations, using the database owner role:
 for f in db/migrations/*.sql; do psql "$DB_OWNER_URL" -f "$f"; done
 ```
 
-| Variable | Para qué |
+| Variable | Purpose |
 |---|---|
-| `APM_DB_URL` | Conexión a Postgres (rol de la app, no el dueño) |
-| `ANTHROPIC_API_KEY` | Los agentes |
-| `FIREBASE_PROJECT_ID` · `FIREBASE_CLIENT_EMAIL` · `FIREBASE_PRIVATE_KEY` | Verificar el login |
-| `APM_ALLOWED_UIDS` | **Quién puede entrar.** Cualquier otro usuario válido recibe 403 |
-| `DAILY_BUDGET_USD` | Freno de mano del gasto diario (por defecto 5) |
-| `MAX_CONCURRENT_RUNS` | Cuántos agentes a la vez (~1 GB de RAM cada uno) |
-| `N8N_BASE_URL` · `N8N_API_KEY` | (Opcional) tus automatizaciones |
+| `APM_DB_URL` | Postgres connection (the app role, not the owner) |
+| `ANTHROPIC_API_KEY` | The agents |
+| `FIREBASE_PROJECT_ID` · `FIREBASE_CLIENT_EMAIL` · `FIREBASE_PRIVATE_KEY` | Login verification |
+| `APM_ALLOWED_UIDS` | **Who can get in.** Any other valid user gets a 403 |
+| `DAILY_BUDGET_USD` | Daily spending handbrake (default 5) |
+| `MAX_CONCURRENT_RUNS` | How many agents at once (~1 GB RAM each) |
+| `N8N_BASE_URL` · `N8N_API_KEY` | (Optional) your automations |
 
-> 🔐 El login acepta un *ID token* de Firebase (`Authorization: Bearer …`) o una cookie de sesión compartida con tu web principal. Siempre comprueba si la cuenta ha sido revocada.
+> 🔐 Login accepts a Firebase *ID token* (`Authorization: Bearer …`) or a session cookie shared with your main site. It always checks whether the account has been revoked.
 
 ### Tests
 ```bash
 cd api && npm ci && npm test
 ```
 
-## 📚 La investigación incluida
-Antes de escribir código se investigó cada pieza, con fuentes. Es útil aunque no uses el proyecto:
+## 📚 The research included
+Every piece was researched, with sources, before writing code. It's useful even if you never run the project (reports are in Spanish):
 
-| Informe | Tema |
+| Report | Topic |
 |---|---|
-| [A](docs/research/A-agent-sdk.md) | Claude Agent SDK: sesiones, `canUseTool`, hooks, coste real |
-| [B](docs/research/B-arquitecturas.md) | Arquitecturas de "mission control" y orquestadores |
-| [C](docs/research/C-ui-chat.md) | UI de chat y *generative UI*, streaming por SSE |
-| [D](docs/research/D-scrapers-leads.md) | Fuentes de leads y su análisis legal y de términos de uso |
-| [E](docs/research/E-email.md) | Correo: Gmail API vs IMAP, seguridad |
-| [F](docs/research/F-n8n-automatizaciones.md) | n8n, scheduler y SSE detrás de un proxy |
+| [A](docs/research/A-agent-sdk.md) | Claude Agent SDK: sessions, `canUseTool`, hooks, real cost |
+| [B](docs/research/B-arquitecturas.md) | "Mission control" architectures and orchestrators |
+| [C](docs/research/C-ui-chat.md) | Chat UI and *generative UI*, SSE streaming |
+| [D](docs/research/D-scrapers-leads.md) | Lead sources and their legal / terms-of-service analysis |
+| [E](docs/research/E-email.md) | Email: Gmail API vs IMAP, security |
+| [F](docs/research/F-n8n-automatizaciones.md) | n8n, scheduler and SSE behind a proxy |
 
-## 🤖 Con Claude Code o Codex
-Abre la carpeta con `claude` o `codex`. Empieza por `docs/ARCHITECTURE.md` y pídele, por ejemplo: *"Añade un subagente que resuma mis correos sin poder enviarlos"*.
+## 🤖 With Claude Code or Codex
+Open the folder with `claude` or `codex`. Start from `docs/ARCHITECTURE.md` and ask, for example: *"Add a subagent that summarizes my email without being able to send any."*
 
-## 💸 Ahorro y mejoras
-Ver **[AHORRO-Y-MEJORAS.md](AHORRO-Y-MEJORAS.md)**.
+## 💸 Savings and tips
+See **[SAVINGS-AND-TIPS.md](SAVINGS-AND-TIPS.md)**.
 
-## ⚖️ Uso responsable
-Respeta los términos de cada fuente de datos y las leyes de contacto comercial (CAN-SPAM, TCPA). Este proyecto **nunca envía nada sin tu aprobación explícita**; mantenlo así.
+## 🤝 Contributing
+Issues and PRs are welcome — look for the [`good first issue`](https://github.com/RosaritoRD/centro-de-mando/labels/good%20first%20issue) label and read [CONTRIBUTING.md](CONTRIBUTING.md). Questions and ideas go in [Discussions](https://github.com/RosaritoRD/centro-de-mando/discussions).
 
-## 📚 Más
-📖 Guías y más proyectos: **[keizactech.com/docs](https://keizactech.com/docs)**
+## ⚖️ Responsible use
+Respect each data source's terms and commercial-contact laws (CAN-SPAM, TCPA). This project **never sends anything without your explicit approval** — keep it that way.
 
-## 📄 Licencia
-MIT — ver [LICENSE](LICENSE).
+## 📚 More
+📖 Guides and more projects: **[keizactech.com/docs](https://keizactech.com/docs)**
+
+## 📄 License
+MIT — see [LICENSE](LICENSE).
