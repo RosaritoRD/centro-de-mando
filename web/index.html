@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>APM — tu empresa</title>
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#F6F8FC" />
+<!--
+  Tema antes del primer pintado. Va inline y no en un módulo porque un módulo
+  llega después de que el navegador ya pintó: se vería un fogonazo blanco al
+  entrar en oscuro, o al revés. Mismo patrón que tu web principal.
+
+  El claro es el predeterminado (docs/research/H-spectra-tokens.md §H.2): en
+  tu web principal lo es, y dos productos de la misma casa no pueden abrir con
+  fondos distintos.
+-->
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem('apm-theme');
+      document.body && (document.body.dataset.theme = t === 'dark' ? 'dark' : 'light');
+      document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+    } catch (e) { /* sin storage: se queda en claro */ }
+  })();
+</script>
+</head>
+<body data-theme="light">
+<div id="root"></div>
+<script type="module" src="/src/main.jsx"></script>
+</body>
+</html>

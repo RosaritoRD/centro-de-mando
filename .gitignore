@@ -1,0 +1,39 @@
+# Secretos y configuración local — nunca al repo
+#
+# Los patrones son AMPLIOS a propósito, y el motivo es una cicatriz real: el
+# 01/08/2026 se coló al repo de tu web principal un `api/.env.bak-2026-08-010343`
+# —el .env entero, con Stripe, Firebase y FLEET_CRED_KEY dentro— porque las
+# reglas cubrían solo los nombres exactos que alguien se había imaginado.
+#
+# Regla: cualquier cosa que EMPIECE por .env y no sea el ejemplo, fuera.
+# Desapuntar un falso positivo es trivial; despublicar una clave no.
+.env
+.env*
+api/.env
+api/.env*
+**/.env*
+# El ejemplo SÍ va al repo: solo nombres de variables, ningún valor.
+!.env.example
+!api/.env.example
+!**/.env.example
+
+# Claves del Admin SDK de Firebase — NUNCA al repo
+*service-account*.json
+*serviceAccount*.json
+sa-key*.json
+
+# Dependencias y artefactos de build
+node_modules/
+web/dist/
+
+# Sistema
+.DS_Store
+
+# Grafo de conocimiento de graphify — artefacto local
+graphify-out/
+.graphify_*
+
+# Los spikes enlazan el node_modules de api/ en vez de duplicarlo.
+# El patron `node_modules/` de arriba no casa con un symlink.
+spike/*/node_modules
+.worktrees/
