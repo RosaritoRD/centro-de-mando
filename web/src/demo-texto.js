@@ -1,18 +1,19 @@
-/* El texto con la demo de /try que el dueño manda después de una llamada (12/10/2026).
+/* The /try demo text the owner sends after a call (12/10/2026).
 
-   Solo cuando la persona dice que sí (TCPA): por eso son botones de copiar y no
-   un envío. El enlace abre la demo de tu-dominio.com/try con el nombre, el oficio
-   y la zona de ESE negocio, y la recepcionista contesta "Thanks for calling
-   <su negocio>". Las páginas de /try están en inglés: el texto en español lo dice
-   y avisa de que la voz contesta en español si le hablan en español.
+   Only when the person says yes (TCPA): that's why these are copy buttons and
+   not a send. The link opens the your-domain.com/try demo with THAT business's
+   name, trade and area, and the receptionist answers "Thanks for calling
+   <their business>". The /try pages are in English: the Spanish text says so
+   and mentions that the voice answers in Spanish if spoken to in Spanish.
+   (The message texts themselves are customer-facing content, in both languages.)
 
-   Las clínicas no reciben demo: sus llamadas son datos de salud (HIPAA) y hoy no
-   hay contrato BAA con los proveedores de voz. */
+   Clinics get no demo: their calls are health data (HIPAA) and today there's
+   no BAA with the voice providers. */
 
-const DOMINIO = 'https://tu-dominio.com';
+const DOMINIO = 'https://your-domain.com';
 
-/* Nicho de APM → opción de "What you do" en /try. Los oficios concretos van
-   antes que "contractor": un roofing_contractor es de techos, no general. */
+/* APM niche → "What you do" option on /try. Specific trades go before
+   "contractor": a roofing_contractor is roofing, not general. */
 const OFICIOS = [
   [/plumb/, 'plumbing'],
   [/electric/, 'electrical'],
@@ -48,8 +49,8 @@ export function enlaceDemo(lead) {
 export function textoDemo(lead, idioma = 'en') {
   const url = enlaceDemo(lead);
   if (idioma === 'es') {
-    return 'Hola, soy el dueño de tu empresa Tech. Aquí está la demo que le comenté: contesta con el nombre de su negocio y, '
+    return 'Hola, soy Alex de Acme. Aquí está la demo que le comenté: contesta con el nombre de su negocio y, '
       + `si usted le habla en español, le contesta en español. Son 3 minutos y no hay que registrarse: ${url}`;
   }
-  return `Hi, it's el dueño from tu empresa Tech. Here's the demo I mentioned. It answers with your business name. Takes 3 minutes, no sign-up: ${url}`;
+  return `Hi, it's Alex from Acme. Here's the demo I mentioned. It answers with your business name. Takes 3 minutes, no sign-up: ${url}`;
 }

@@ -1,283 +1,278 @@
-# Categoría D — Scrapers de leads (empresas + video) y análisis legal/ToS
+# Category D — Lead scrapers (companies + video) and legal/ToS analysis
 
-**Fecha de investigación:** 2 de agosto de 2026
-**Pregunta que responde:** ¿de dónde saca APM los leads de empresas y de video, cuánto cuesta,
-qué se puede hacer legalmente y qué nos prohíben los términos de servicio?
+**Research date:** August 2, 2026
+**Question it answers:** where does APM get company and video leads from, how much does it
+cost, what can legally be done, and what do the terms of service forbid?
 
-**Todo lo marcado con ✅ está verificado contra la API de GitHub, la documentación oficial o
-los propios términos de servicio en esta fecha.** Lo marcado con ⚠️ NO VERIFICADO se señala.
+**Everything marked ✅ is verified against the GitHub API, the official documentation or the
+terms of service themselves on this date.** Anything ⚠️ NOT VERIFIED is flagged.
 
-⚠️ **Aviso previo:** esto es investigación técnica y de términos de servicio, **no asesoría
-legal**. Antes de lanzar campañas de contacto en frío conviene una revisión con un abogado
-de Nueva Jersey. Las cifras de sanciones están para dimensionar el riesgo, no para
-tranquilizar a nadie.
+⚠️ **Upfront notice:** this is technical and terms-of-service research, **not legal advice**.
+Before launching cold outreach campaigns, a review with a New Jersey lawyer is advisable.
+The penalty figures are there to size the risk, not to reassure anyone.
 
-Depende de: `G-infra-real.md` (RAM), `B-arquitecturas.md` (dónde encajan los workers).
-
----
-
-## 0. Recomendación en una línea
-
-> **Descubrimiento por fuentes abiertas y gratuitas** (censo público de la FMCSA + OpenStreetMap),
-> **enriquecimiento visitando la web propia de cada empresa** (que es lo que sí está permitido),
-> y **Google Places API solo como verificación puntual, nunca como origen del CRM** — porque su
-> política prohíbe almacenar su contenido salvo el `place_id` ✅. Para video, **YouTube Data API
-> v3 exclusivamente**, con 100 búsquedas al día como techo duro ✅, y **prohibido recolectar
-> datos de personas** de YouTube: sus términos lo dicen literalmente ✅.
-
-**Y el hallazgo que más cambia el plan:** el cuello de botella de este módulo **no es
-conseguir leads, es contactarlos**. CAN-SPAM sanciona hasta **$53.088 por correo** ⚠️ y exige
-una **dirección postal física** en cada envío comercial. Eso es una decisión de negocio de
-el dueño (buzón comercial, no la casa) que hay que tomar **antes** de escribir el scraper.
+Depends on: `G-infra-real.md` (RAM), `B-arquitecturas.md` (where the workers fit).
 
 ---
 
-## 1. El filtro: dos restricciones que descartan casi todo
+## 0. One-line recommendation
 
-1. **RAM (G.1):** 4,6 GB libres, 2 núcleos, 1 GB de swap ya en uso, y un contenedor Playwright
-   ya corriendo (`fleet-login-agent`).
-2. **Legal:** APM no es un scraper de nicho, es la herramienta de una empresa **con nombre y
-   dirección** en Nueva Jersey. La estrategia "raspa y ya veremos" no es viable cuando el
-   demandado potencial es el dueño, no un usuario anónimo.
+> **Discovery through free, open sources** (the public FMCSA census + OpenStreetMap),
+> **enrichment by visiting each company's own website** (which is what is allowed),
+> and **Google Places API only as a spot check, never as the CRM's origin** — because its
+> policy forbids storing its content except the `place_id` ✅. For video, **YouTube Data API
+> v3 only**, with 100 searches a day as a hard ceiling ✅, and **collecting personal data from
+> YouTube is forbidden**: its terms say so literally ✅.
 
-Con esos dos filtros, la comparativa de plataformas de scraping se resuelve sola:
+**And the finding that changes the plan the most:** this module's bottleneck **isn't getting
+leads, it's contacting them**. CAN-SPAM fines up to **$53,088 per email** ⚠️ and requires a
+**physical postal address** on every commercial send. That's a business decision for the
+owner (a business mailbox, not the home address) that must be made **before** writing the
+scraper.
 
-| Herramienta | ★ | Licencia | RAM | Veredicto |
+---
+
+## 1. The filter: two constraints that rule out almost everything
+
+1. **RAM (G.1):** 4.6 GB free, 2 cores, 1 GB of swap already in use, and a Playwright
+   container already running on the server.
+2. **Legal:** APM isn't a niche scraper, it's the tool of a company **with a name and an
+   address** in New Jersey. The "scrape and we'll see" strategy isn't viable when the
+   potential defendant is a named business owner, not an anonymous user.
+
+With those two filters, the scraping-platform comparison settles itself:
+
+| Tool | ★ | License | RAM | Verdict |
 |---|---|---|---|---|
-| **Firecrawl** (self-host) | — ⚠️ (repo movido a `firecrawl/firecrawl`, no verificado por API) | AGPL/SSPL ⚠️ | ⚠️ El compose upstream recomienda **4 vCPU / 8 GB para `api`** + 2 vCPU / 4 GB para Playwright (según búsqueda) | ❌ **Imposible**: pide más RAM que toda la VPS |
-| **crawl4ai** | **75.865** ✅ | Apache-2.0 ✅ | ⚠️ ~300 MB en reposo + imagen de 2 GB (según búsqueda) | 🔶 Posible, pero es un stack Python nuevo en una VPS de Node |
-| **Playwright** directo | 93.843 ✅ | Apache-2.0 ✅ | Alto **solo mientras corre** | ✅ **Elegido**: es el patrón que ya usas en Fleet |
-| **Crawlee** (TS) | 25.158 ✅ | Apache-2.0 ✅ | Igual que Playwright + gestión de colas | 🔶 Considerar si el scraping crece |
-| `gosom/google-maps-scraper` | 5.376 ✅ | MIT ✅ | Go, bajo consumo | ⚠️ Ver §3.2 — el problema es legal, no técnico |
-| `yt-dlp` | **181.998** ✅ | Unlicense ✅ | Bajo | ❌ Ver §5.2 — descartado por ToS |
+| **Firecrawl** (self-host) | — ⚠️ (repo moved to `firecrawl/firecrawl`, not verified via API) | AGPL/SSPL ⚠️ | ⚠️ The upstream compose recommends **4 vCPU / 8 GB for `api`** + 2 vCPU / 4 GB for Playwright (per search) | ❌ **Impossible**: asks for more RAM than the whole VPS |
+| **crawl4ai** | **75,865** ✅ | Apache-2.0 ✅ | ⚠️ ~300 MB at rest + a 2 GB image (per search) | 🔶 Possible, but a new Python stack on a Node VPS |
+| **Playwright** directly | 93,843 ✅ | Apache-2.0 ✅ | High **only while running** | ✅ **Chosen**: it's the pattern already used elsewhere on the server |
+| **Crawlee** (TS) | 25,158 ✅ | Apache-2.0 ✅ | Same as Playwright + queue management | 🔶 Consider if scraping grows |
+| `gosom/google-maps-scraper` | 5,376 ✅ | MIT ✅ | Go, low usage | ⚠️ See §3.2 — the problem is legal, not technical |
+| `yt-dlp` | **181,998** ✅ | Unlicense ✅ | Low | ❌ See §5.2 — ruled out by ToS |
 
-**Patrón adoptado:** worker **efímero** de Playwright (arranca, hace el trabajo, muere),
-lanzado por `pg-boss` con concurrencia 1. Nunca un navegador permanente más, ya hay uno.
+**Adopted pattern:** a **throwaway** Playwright worker (starts, does the job, dies), launched
+by `pg-boss` with concurrency 1. Never one more permanent browser; there's already one.
 
 ---
 
-## 2. Fuentes de leads de empresas — comparativa
+## 2. Company lead sources — comparison
 
-| Fuente | Coste | Legalidad de almacenarlo | Cobertura del nicho logística | Veredicto |
+| Source | Cost | Legality of storing it | Coverage of the logistics niche | Verdict |
 |---|---|---|---|---|
-| **FMCSA Company Census File** (censo público de transportistas) | **$0** ✅ | **Dominio público** — dato del gobierno de EE. UU. ✅ | Alta para flotas con vehículos >10.001 lb GVWR | ✅ **Fuente primaria** |
-| **OpenStreetMap / Overpass** | **$0** ✅ | ODbL: uso comercial permitido con atribución; ⚠️ **share-alike sobre bases derivadas** | Media-baja para empresas de reparto | ✅ Complemento |
-| **Google Places API (New)** | **$32 / 1.000** (Text Search Pro) ⚠️ | ❌ **Solo `place_id` almacenable indefinidamente** ✅ | Alta | 🔶 Solo verificación |
-| Scraping de Google Maps (OSS) | $0 + proxies ($50-300/mes ⚠️) | ⚠️ Zona gris, ver §3.2 | Alta | ❌ Descartado |
-| Outscraper / Apify / SerpApi | ⚠️ $1,50 – $14 / 1.000 (según búsqueda) | Trasladan el riesgo a un tercero | Alta | 🔶 Plan B de pago |
-| Web propia de cada empresa | ~$0 (nuestro Playwright) | ✅ Sitio público, logged-out | La mejor para enriquecer | ✅ **Capa de enriquecimiento** |
+| **FMCSA Company Census File** (public carrier census) | **$0** ✅ | **Public domain** — US government data ✅ | High for fleets with vehicles >10,001 lb GVWR | ✅ **Primary source** |
+| **OpenStreetMap / Overpass** | **$0** ✅ | ODbL: commercial use allowed with attribution; ⚠️ **share-alike on derived databases** | Medium-low for delivery companies | ✅ Complement |
+| **Google Places API (New)** | **$32 / 1,000** (Text Search Pro) ⚠️ | ❌ **Only `place_id` can be stored indefinitely** ✅ | High | 🔶 Verification only |
+| Google Maps scraping (OSS) | $0 + proxies ($50-300/month ⚠️) | ⚠️ Gray area, see §3.2 | High | ❌ Ruled out |
+| Outscraper / Apify / SerpApi | ⚠️ $1.50 – $14 / 1,000 (per search) | They shift the risk to a third party | High | 🔶 Paid plan B |
+| Each company's own website | ~$0 (our Playwright) | ✅ Public site, logged out | The best for enrichment | ✅ **Enrichment layer** |
 
-### 2.1 El hallazgo: el censo de la FMCSA
+### 2.1 The finding: the FMCSA census
 
-El **Company Census File** del Departamento de Transporte es un fichero **descargable en
-bloque, gratuito, de dominio público y actualizado a diario** (última actualización
-verificada: 26-jul-2026 ✅). Contiene, por cada entidad con número USDOT: identificación,
-datos de operación del negocio, **dirección**, equipos y conductores, tipos de autoridad y
-seguros ✅. Los conjuntos "Entities with a USDOT Number" se generan de una base de 24 h y
-suelen estar en el portal antes de las 12:00 EST ✅.
+The Department of Transportation's **Company Census File** is a **bulk-downloadable, free,
+public-domain file updated daily** (latest verified update: 26-Jul-2026 ✅). For each entity
+with a USDOT number it contains: identification, business operation data, **address**,
+equipment and drivers, authority types and insurance ✅. The "Entities with a USDOT Number"
+sets are generated from a 24-h database and are usually on the portal before 12:00 EST ✅.
 
-Para un producto que vende software a empresas de reparto, esto es **exactamente la lista de
-clientes potenciales, gratis y sin ToS que la restrinja**. Es infinitamente mejor que raspar
-Google Maps: es más completo, más estructurado, incluye número de vehículos y conductores
-(o sea, **con qué tamaño de flota tratamos = qué plan de precio ofrecer**), y es legal sin
-matices.
+For a product that sells software to delivery companies, this is **exactly the list of
+prospects, free and with no ToS restricting it**. It's infinitely better than scraping
+Google Maps: more complete, more structured, includes the number of vehicles and drivers (that
+is, **what fleet size we're dealing with = which price plan to offer**), and it's legal with
+no caveats.
 
-⚠️ **Su límite, y es importante:** solo aparecen quienes tienen número USDOT, obligatorio a
-partir de **10.001 lb de GVWR** en comercio interestatal ✅. Las furgonetas típicas de DSP
-(Transit, ProMaster) rondan **8.550–11.030 lb** ⚠️, así que **una parte de los DSP estará y
-otra no**. Y el caso que el dueño conoce de primera mano —un DSP que opera **solo con
-bicicletas**— **no aparecerá jamás** en ese censo. Conclusión honesta: el censo de la FMCSA
-es una gran fuente para DSP de furgoneta y flotas de última milla, **no** para reparto en
-bici. Para ese segmento hay que ir por OSM y por la web abierta.
+⚠️ **Its limit, and it matters:** only those with a USDOT number appear, mandatory from
+**10,001 lb GVWR** in interstate commerce ✅. Typical DSP vans (Transit, ProMaster) are around
+**8,550–11,030 lb** ⚠️, so **some DSPs will be there and some won't**. And a DSP that operates
+**only with bicycles** — a case the owner knows first-hand — **will never show up** in that
+census. Honest conclusion: the FMCSA census is a great source for van DSPs and last-mile
+fleets, **not** for bike delivery. For that segment you have to go through OSM and the open
+web. (Verified later: see `FASE3-fuente-leads.md` — in practice the census does not cover DSPs.)
 
-### 2.2 Por qué Google Places API no puede ser el origen del CRM
+### 2.2 Why Google Places API can't be the CRM's origin
 
-Verificado en la página oficial de políticas de la Places API ✅:
+Verified on the official Places API policies page ✅:
 
 > "You must not pre-fetch, cache, or store Places API content beyond the allowed exceptions."
 
-y
+and
 
 > "The **place ID**, used to uniquely identify a place, is **exempt from** the caching restrictions."
 
-Traducido a nuestro caso: **el nombre, la dirección y el teléfono que devuelve Places no se
-pueden guardar en la tabla `leads`** más allá de las excepciones permitidas. Lo único que
-podemos guardar para siempre es un identificador opaco que, por sí solo, no sirve para
-contactar a nadie. ⚠️ La cifra concreta de "30 días" para las coordenadas viene de resultados
-de búsqueda y de los *Service Specific Terms*, que **no pude descargar** (la petición devolvió
-contenido vacío) — **queda como NO VERIFICADO**.
+Translated to our case: **the name, address and phone Places returns can't be saved in the
+`leads` table** beyond the allowed exceptions. The only thing we can keep forever is an opaque
+identifier that, on its own, doesn't let you contact anyone. ⚠️ The specific "30 days" figure
+for coordinates comes from search results and the *Service Specific Terms*, which **I couldn't
+download** (the request returned empty content) — **it stays NOT VERIFIED**.
 
-Además, el precio hace el resto del argumento: **$32 por cada 1.000 búsquedas de texto en el
-nivel Pro** ⚠️ (según búsqueda; el nivel "Essentials/IDs Only" es gratis pero **solo devuelve
-identificadores**, ni nombre ni dirección ✅ — es decir, lo gratis es justo lo inútil para leads).
+On top of that, the price makes the rest of the argument: **$32 per 1,000 text searches on the
+Pro tier** ⚠️ (per search; the "Essentials/IDs Only" tier is free but **only returns
+identifiers**, no name or address ✅ — i.e. the free part is exactly the part useless for leads).
 
-→ **Uso permitido en APM:** verificar puntualmente que una empresa que ya tenemos por otra vía
-sigue existiendo, mostrándolo en pantalla con su atribución, sin persistir el contenido.
-Nada más.
+→ **Allowed use in APM:** spot-check that a company we already have from another source still
+exists, showing it on screen with its attribution, without persisting the content. Nothing more.
 
 ---
 
-## 3. El marco legal en EE. UU. (2026)
+## 3. The legal framework in the US (2026)
 
-### 3.1 Lo que dicen los casos
+### 3.1 What the cases say
 
-- **Van Buren (Supremo)** + **hiQ v. LinkedIn**: raspar datos **públicos** no infringe la
-  CFAA cuando no se salta ninguna barrera de autenticación ✅.
-- **Pero hiQ perdió la guerra**: en noviembre de 2022 el tribunal apreció **incumplimiento
-  del contrato de usuario** de LinkedIn, que hiQ había aceptado al crear cuentas ✅.
-- **Meta v. Bright Data (enero 2024)**: el tribunal **no** apreció incumplimiento por raspar
-  páginas públicas de Facebook e Instagram **sin iniciar sesión**, porque los términos obligan
-  a los titulares de cuenta, no a un visitante deslogueado. Meta retiró la demanda en febrero
-  de 2024 ✅.
+- **Van Buren (Supreme Court)** + **hiQ v. LinkedIn**: scraping **public** data doesn't violate
+  the CFAA when no authentication barrier is bypassed ✅.
+- **But hiQ lost the war**: in November 2022 the court found **breach of LinkedIn's user
+  agreement**, which hiQ had accepted when creating accounts ✅.
+- **Meta v. Bright Data (January 2024)**: the court found **no** breach for scraping public
+  Facebook and Instagram pages **without logging in**, because the terms bind account
+  holders, not a logged-out visitor. Meta dropped the suit in February 2024 ✅.
 
-**La regla que emerge, y que APM adopta como norma interna:**
+**The rule that emerges, which APM adopts as an internal norm:**
 
-> Raspado público **sin iniciar sesión** = defendible.
-> Raspado **con sesión iniciada** contra unos términos que aceptaste = indefendible.
-> La CFAA te protege del "hackeo"; **no te protege de un contrato que firmaste**.
+> Public scraping **without logging in** = defensible.
+> Scraping **while logged in** against terms you accepted = indefensible.
+> The CFAA protects you from "hacking"; **it doesn't protect you from a contract you signed**.
 
-### 3.2 Aplicado a Google Maps
+### 3.2 Applied to Google Maps
 
-Aquí la regla anterior **no nos salva**, por un matiz que conviene entender: para usar la
-**API** hay que aceptar sus términos → estás dentro del contrato. Y para raspar la **web** de
-Google Maps sin sesión, entras en la zona que Meta v. Bright Data hace defendible… pero
-Google no es Meta, el frontend de Maps cambia sin previo aviso ⚠️, y haría falta un parque de
-proxies residenciales (⚠️ $50-300/mes según búsqueda) para sostenerlo.
+Here the rule above **doesn't save us**, because of a nuance worth understanding: to use the
+**API** you have to accept its terms → you're inside the contract. And to scrape the Google
+Maps **website** logged out, you enter the zone Meta v. Bright Data makes defensible… but
+Google isn't Meta, the Maps frontend changes without notice ⚠️, and a pool of residential
+proxies (⚠️ $50-300/month per search) would be needed to sustain it.
 
-**Coste/beneficio: pésimo.** Pagar proxies y mantenimiento perpetuo para obtener peores datos
-que un fichero gubernamental gratuito, asumiendo riesgo legal, con el nombre real de la
-empresa detrás. **Descartado**, y `gosom/google-maps-scraper` (5.376 ★, MIT, muy digno
-técnicamente ✅) se descarta con él.
+**Cost/benefit: terrible.** Paying for proxies and perpetual maintenance to get worse data
+than a free government file, taking legal risk, with the company's real name behind it.
+**Ruled out**, and `gosom/google-maps-scraper` (5,376 ★, MIT, technically very solid ✅) goes
+with it. (Phase 3 later revisited this for gentle, internal-only use — see
+`api/sources/google-maps.js` for the limits attached to that decision.)
 
-### 3.3 Reglas internas de scraping para APM
+### 3.3 Internal scraping rules for APM
 
-Estas reglas van al código, no a un documento que nadie lee:
+These rules go into the code, not into a document nobody reads:
 
-1. **Nunca iniciar sesión** en un sitio de terceros para extraer datos.
-2. **Respetar `robots.txt`** siempre. Aunque no sea vinculante por sí solo, ignorarlo es lo
-   primero que enseña un demandante.
-3. **User-Agent identificable** (`MiBot/1.0 (+https://tu-dominio.com/bot)`) y un correo de
-   contacto. Esconderse es lo que convierte un scraper en "acceso no autorizado" a ojos de
-   un juez.
-4. **Rate limit conservador** por dominio (1 petición cada 2-5 s) y respeto de `429`/`503`
-   con backoff.
-5. **Datos de empresa, no de persona.** Teléfono y correo genéricos del negocio
-   (`info@`, `contact@`), nunca correos personales de empleados ni nada que huela a perfil.
-6. **Procedencia obligatoria**: cada fila de `leads` guarda `source`, `source_url`,
-   `fetched_at` y `license`. Si un día hay que borrar todo lo de una fuente, es un `DELETE`,
-   no una arqueología.
-
----
-
-## 4. El cuello de botella real: contactar, no encontrar
-
-Esto es lo que menos esperaba encontrar y lo que más afecta al plan de negocio.
-
-**CAN-SPAM** (EE. UU.) sí permite el correo comercial en frío **sin consentimiento previo**,
-a diferencia del RGPD o la CASL canadiense ⚠️. Pero exige, en **cada** envío comercial:
-
-1. Encabezados y remitente veraces.
-2. Asunto no engañoso.
-3. Identificar el mensaje como publicidad.
-4. **Una dirección postal física válida.**
-5. Un mecanismo de baja **que funcione**.
-6. Procesar las bajas en **≤ 30 días naturales** ⚠️.
-7. Responder por lo que hagan los proveedores que contrates.
-
-**Sanción: hasta $53.088 por correo individual** ⚠️ (según búsqueda, ajuste por inflación de
-la FTC 2026) — **por correo, no por campaña**. Una lista de 500 leads mal enviada no es un
-susto, es existencial.
-
-### 4.1 Dos decisiones que el dueño tiene que tomar antes de escribir código
-
-1. **¿Qué dirección postal va en el pie de los correos?** tu empresa es una empresa
-   individual con sede en la casa del dueño. Poner la dirección de casa en miles de
-   correos comerciales es legal, pero es publicar el domicilio familiar. **Recomendación:
-   contratar un buzón comercial (CMRA registrada en USPS) o un apartado de correos** — ambos
-   cuentan como dirección física válida ⚠️. Coste bajo, y evita algo que no tiene marcha atrás.
-2. **¿Se contacta a Europa?** Si un lead tiene sede en la UE, entra el RGPD y **el juego
-   cambia por completo** (consentimiento, base legal, derechos del interesado). Recomendación:
-   **filtro de país en la tabla `leads`; el módulo de envío se niega a contactar fuera de
-   EE. UU.** hasta que exista una decisión explícita al respecto.
-
-### 4.2 Consecuencia técnica
-
-El módulo de envío de APM necesita, desde el día uno y **antes** de mandar el primer correo:
-tabla de **supresión** (bajas + rebotes, permanente y consultada en cada envío), pie con
-dirección física e enlace de baja inyectados por el **servidor** (no por el prompt del
-agente), registro de cada envío con su `message_id`, y **aprobación humana obligatoria** para
-cualquier envío masivo (§6 del informe B). Un agente no envía correo comercial solo. Nunca.
+1. **Never log in** to a third-party site to extract data.
+2. **Always respect `robots.txt`.** Even if it isn't binding on its own, ignoring it is the
+   first thing a plaintiff points out.
+3. **An identifiable User-Agent** (`MyBot/1.0 (+https://your-domain.com/bot)`) and a contact
+   email. Hiding is what turns a scraper into "unauthorized access" in a judge's eyes.
+4. **A conservative per-domain rate limit** (1 request every 2-5 s) and respect for
+   `429`/`503` with backoff.
+5. **Business data, not personal data.** The business's generic phone and email (`info@`,
+   `contact@`), never employees' personal emails or anything resembling a profile.
+6. **Mandatory provenance**: each `leads` row stores `source`, `source_url`, `fetched_at` and
+   `license`. If one day everything from a source must be deleted, it's a `DELETE`, not
+   archaeology.
 
 ---
 
-## 5. Leads de video (YouTube)
+## 4. The real bottleneck: contacting, not finding
 
-### 5.1 La vía oficial: YouTube Data API v3
+This is what I least expected to find and what most affects the business plan.
 
-- Cuota por defecto: **10.000 unidades/día por proyecto** ✅.
-- Una llamada de **búsqueda cuesta 100 unidades** → **100 búsquedas al día y se acabó** ✅.
-  Las lecturas simples cuestan 1 unidad ✅.
-- **No se puede pagar por más cuota**: solo se pide por el formulario de auditoría y
-  extensión, con revisión de semanas a meses ⚠️.
-- **No hay coste monetario por llamada** ✅ — la cuota es la única restricción.
+**CAN-SPAM** (US) does allow cold commercial email **without prior consent**, unlike the GDPR
+or Canada's CASL ⚠️. But it requires, on **every** commercial send:
 
-**Diseño obligado por la cuota:** las búsquedas (100 unidades) son el recurso escaso; los
-detalles (1 unidad) son casi gratis. → El worker hace **pocas búsquedas amplias** y luego
-muchas lecturas baratas, con **caché agresiva** en Postgres y deduplicación por `channel_id`.
-Un contador de cuota diario en la BD que **bloquea** al llegar a ~9.000 unidades, para no
-quedarnos sin API a media mañana.
+1. Truthful headers and sender.
+2. A non-deceptive subject.
+3. Identifying the message as an ad.
+4. **A valid physical postal address.**
+5. An unsubscribe mechanism **that works**.
+6. Processing unsubscribes in **≤ 30 calendar days** ⚠️.
+7. Answering for what the vendors you hire do.
 
-### 5.2 Por qué `yt-dlp` queda descartado pese a sus 181.998 ★
+**Penalty: up to $53,088 per individual email** ⚠️ (per search, FTC 2026 inflation
+adjustment) — **per email, not per campaign**. A badly sent list of 500 leads isn't a scare,
+it's existential.
 
-Términos de servicio de YouTube, **citados textualmente** ✅:
+### 4.1 Two decisions the owner must make before writing code
+
+1. **Which postal address goes in the email footer?** The company is a sole proprietorship
+   based at the owner's home. Putting the home address on thousands of commercial emails is
+   legal, but it means publishing the family home. **Recommendation: get a business mailbox
+   (a USPS-registered CMRA) or a PO Box** — both count as a valid physical address ⚠️. Low
+   cost, and it avoids something that can't be undone.
+2. **Contact Europe?** If a lead is based in the EU, the GDPR applies and **the game changes
+   completely** (consent, legal basis, data subject rights). Recommendation: **a country
+   filter on the `leads` table; the sending module refuses to contact anyone outside the US**
+   until there's an explicit decision about it.
+
+### 4.2 Technical consequence
+
+APM's sending module needs, from day one and **before** the first email goes out: a
+**suppression** table (unsubscribes + bounces, permanent and checked on every send), a footer
+with the physical address and unsubscribe link injected by the **server** (not by the agent's
+prompt), a log of every send with its `message_id`, and **mandatory human approval** for any
+bulk send (§6 of report B). An agent never sends commercial email on its own. Ever.
+
+---
+
+## 5. Video leads (YouTube)
+
+### 5.1 The official route: YouTube Data API v3
+
+- Default quota: **10,000 units/day per project** ✅.
+- A **search call costs 100 units** → **100 searches a day and that's it** ✅. Simple reads
+  cost 1 unit ✅.
+- **You can't pay for more quota**: it's only requested through the audit and extension form,
+  with a review taking weeks to months ⚠️.
+- **No monetary cost per call** ✅ — the quota is the only restriction.
+
+**Design forced by the quota:** searches (100 units) are the scarce resource; details (1 unit)
+are almost free. → The worker does **few broad searches** and then many cheap reads, with
+**aggressive caching** in Postgres and dedup by `channel_id`. A daily quota counter in the DB
+that **blocks** at ~9,000 units, so we don't run out of API mid-morning.
+
+### 5.2 Why `yt-dlp` is ruled out despite its 181,998 ★
+
+YouTube's terms of service, **quoted verbatim** ✅:
 
 > "access the Service using any automated means (such as robots, botnets or scrapers) except
 > (a) in the case of public search engines, in accordance with YouTube's robots.txt file; or
 > (b) with YouTube's prior written permission"
 
-y, aún más directo para un módulo de leads:
+and, even more directly for a lead module:
 
 > "collect or harvest any information that might identify a person (for example, usernames or
 > faces), unless permitted by that person"
 
-No somos un buscador público y no tenemos permiso escrito. Y "recolectar información que
-pueda identificar a una persona" **es la definición literal de un scraper de leads**.
-→ `yt-dlp` fuera, y **raspar comentarios para sacar contactos, fuera también**, aunque se
-haga con la API oficial.
+We're not a public search engine and we have no written permission. And "collecting
+information that might identify a person" **is the literal definition of a lead scraper**.
+→ `yt-dlp` is out, and **scraping comments to extract contacts is out too**, even through the
+official API.
 
-### 5.3 Qué SÍ puede hacer APM con video
+### 5.3 What APM CAN do with video
 
-Descubrimiento de **canales y contenido**, no de personas: qué se publica sobre gestión de
-DSP, qué competidores aparecen, qué preguntas repiten los operadores. Eso alimenta el motor
-de contenido (que ya existe en n8n) y la investigación de mercado. **El "lead" que sale de
-YouTube es un tema o una empresa, no un individuo.**
+Discovery of **channels and content**, not people: what's published about running a DSP,
+which competitors appear, which questions operators keep asking. That feeds the content engine
+(which already exists in n8n) and market research. **The "lead" that comes out of YouTube is a
+topic or a company, not an individual.**
 
-⚠️ NO VERIFICADO: los *Developer Policies* de YouTube (documento aparte de los ToS que sí leí)
-imponen, según se comenta habitualmente, un límite de ~30 días para almacenar datos de la API
-antes de refrescarlos o borrarlos. **No pude confirmarlo en la fuente.** Antes de diseñar la
-tabla de caché de YouTube hay que leer ese documento.
+⚠️ NOT VERIFIED: YouTube's *Developer Policies* (a separate document from the ToS I did read)
+reportedly impose a ~30-day limit on storing API data before refreshing or deleting it. **I
+couldn't confirm it at the source.** That document must be read before designing the YouTube
+cache table.
 
 ---
 
-## 6. Arquitectura del módulo de leads
+## 6. Lead module architecture
 
 ```mermaid
 flowchart LR
-    subgraph desc["1. Descubrimiento (gratis, legal)"]
-        FMCSA["Censo FMCSA<br/>descarga diaria en bloque"]
-        OSM["Overpass / OSM<br/>ODbL + atribución"]
+    subgraph desc["1. Discovery (free, legal)"]
+        FMCSA["FMCSA census<br/>daily bulk download"]
+        OSM["Overpass / OSM<br/>ODbL + attribution"]
     end
-    subgraph enr["2. Enriquecimiento"]
-        WEB["Worker Playwright efímero<br/>web pública de la empresa<br/>robots.txt + UA identificable"]
+    subgraph enr["2. Enrichment"]
+        WEB["Throwaway Playwright worker<br/>company's public website<br/>robots.txt + identifiable UA"]
     end
-    subgraph ver["3. Verificación (opcional, de pago)"]
-        GP["Places API<br/>solo pantalla, sin persistir"]
+    subgraph ver["3. Verification (optional, paid)"]
+        GP["Places API<br/>screen only, not persisted"]
     end
-    subgraph out["4. Salida"]
+    subgraph out["4. Output"]
         DB[("leads<br/>+ source, source_url,<br/>fetched_at, license")]
-        SUP[("supresión<br/>bajas y rebotes")]
-        CSV["Export CSV"]
-        MAIL["Envío — SOLO tras<br/>aprobación humana"]
+        SUP[("suppression<br/>unsubscribes and bounces")]
+        CSV["CSV export"]
+        MAIL["Sending — ONLY after<br/>human approval"]
     end
 
     FMCSA --> DB
@@ -289,76 +284,76 @@ flowchart LR
     SUP --> MAIL
 ```
 
-**Coste mensual estimado de esta arquitectura: $0** en fuentes de datos. Todo el gasto se va
-a tokens del agente que clasifica y redacta. Compárese con los ~$14/1.000 leads de las
-plataformas comerciales ⚠️, o con los $32/1.000 de Places ⚠️.
+**Estimated monthly cost of this architecture: $0** in data sources. All the spend goes to
+tokens for the agent that classifies and drafts. Compare with the ~$14/1,000 leads of
+commercial platforms ⚠️, or Places' $32/1,000 ⚠️.
 
-**RAM:** el worker de Playwright es efímero y con concurrencia 1 → pico de ~300-500 MB
-mientras corre ⚠️ (a medir), cero en reposo. Compatible con el límite de 2 ejecuciones
-concurrentes fijado en el informe B.
-
----
-
-## 7. Plan de implementación (Fase 3 del PLAN)
-
-1. **Descarga del censo FMCSA** → tabla `leads` con filtro por estado y tamaño de flota.
-   Sin navegador, sin proxies, sin riesgo legal. Es el 80 % del valor por el 5 % del esfuerzo.
-2. **Pipeline** `nuevo → calificado → contactado → cliente` + tabla de supresión desde el
-   primer día (no "después").
-3. **Enriquecimiento** con Playwright efímero sobre la web propia de cada empresa.
-4. **Tabla filtrable + export CSV** (esto ya es UI).
-5. **Disparo conversacional**: "búscame DSP en Nueva Jersey con 20-50 furgonetas" → parámetros
-   → ejecución. Aquí es donde el agente aporta, no en el scraping.
-6. **YouTube** al final, con contador de cuota, y solo para temas/empresas.
-7. **Envío**: lo último, con dirección postal decidida, baja funcionando y aprobación humana.
+**RAM:** the Playwright worker is throwaway with concurrency 1 → a peak of ~300-500 MB while
+running ⚠️ (to be measured), zero at rest. Compatible with the 2-concurrent-runs limit set in
+report B.
 
 ---
 
-## 8. ⚠️ Correcciones a supuestos previos
+## 7. Implementation plan (Phase 3 of the PLAN)
 
-1. **"Scraper de empresas (Google Maps)" del PLAN — cambia de fuente.** El PLAN de Fase 3 dice
-   literalmente "Scraper de empresas (Google Maps) end-to-end". La investigación dice que esa
-   es la peor de las opciones disponibles: más cara, más frágil y con más riesgo legal que el
-   censo público de la FMCSA. **Propongo cambiar esa línea del PLAN** a "Importador del censo
-   FMCSA + enriquecimiento web". Decisión de el dueño.
-2. **"El scraping es el problema" — falso.** El problema es el **envío** conforme a CAN-SPAM y
-   la dirección postal. Conseguir 5.000 leads es un `curl`; mandarles un correo sin exponerse
-   a $53.088 por mensaje requiere infraestructura y una decisión de negocio.
-3. **Firecrawl estaba en la lista de candidatos del brief — es imposible aquí.** Su propio
-   compose pide más RAM que la VPS entera ⚠️.
-
----
-
-## 9. Riesgos e incógnitas (NO VERIFICADO)
-
-1. **⚠️ Cobertura real de los DSP en el censo FMCSA.** Sé que el umbral es 10.001 lb GVWR ✅ y
-   que las furgonetas rondan esa cifra ⚠️, pero **no he descargado el fichero ni contado
-   cuántos DSP reales aparecen**. Es lo primero que hay que comprobar en la Fase 3 — y es
-   barato: descargar, filtrar por NJ/NY, contar.
-2. **⚠️ Estructura y campos exactos del fichero FMCSA**: no descargado.
-3. **⚠️ Términos específicos de Google Maps Platform**: la página de *Service Specific Terms*
-   devolvió contenido vacío. La regla del `place_id` y la prohibición de cachear **sí** están
-   verificadas en la página de políticas ✅; el plazo de 30 días para coordenadas **no**.
-4. **⚠️ Precios de Places API**: de resultados de búsqueda, no de la página oficial de precios.
-5. **⚠️ Developer Policies de YouTube** (§5.3): sin leer. Afecta al diseño de la caché.
-6. **⚠️ Sanción CAN-SPAM de $53.088**: de búsqueda, no de la fuente de la FTC. La magnitud es
-   la correcta; la cifra exacta hay que confirmarla.
-7. **⚠️ Share-alike de ODbL**: si mezclamos OSM en la tabla `leads`, ¿queda esa tabla sujeta a
-   ODbL como base derivada? Es una pregunta real y sin responder. **Mitigación prudente:
-   mantener los datos de OSM en una tabla aparte** y no fundirlos en el CRM hasta aclararlo.
-8. **⚠️ Consumo real de RAM del worker Playwright**: estimación, no medición.
-9. **Esto no es asesoría legal.** Antes de la primera campaña, revisión profesional.
+1. **FMCSA census download** → `leads` table filtered by state and fleet size. No browser, no
+   proxies, no legal risk. It's 80% of the value for 5% of the effort.
+2. **Pipeline** `new → qualified → contacted → customer` + a suppression table from day one
+   (not "later").
+3. **Enrichment** with throwaway Playwright on each company's own website.
+4. **Filterable table + CSV export** (this is already UI).
+5. **Conversational trigger**: "find me DSPs in New Jersey with 20-50 vans" → parameters → run.
+   This is where the agent adds value, not in the scraping.
+6. **YouTube** at the end, with a quota counter, and only for topics/companies.
+7. **Sending**: last, with the postal address decided, a working unsubscribe and human approval.
 
 ---
 
-## Fuentes
+## 8. ⚠️ Corrections to earlier assumptions
 
-- [FMCSA — Programa de difusión de datos](https://www.fmcsa.dot.gov/registration/fmcsa-data-dissemination-program) · [Company Census File (data.gov)](https://catalog.data.gov/dataset/company-census-file) · [¿Necesito un número USDOT?](https://www.fmcsa.dot.gov/registration/do-i-need-usdot-number)
-- [Google — Políticas de la Places API](https://developers.google.com/maps/documentation/places/web-service/policies) · [Uso y facturación](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing) · [Service Specific Terms](https://cloud.google.com/maps-platform/terms/maps-service-terms) (no descargable en esta sesión)
-- [YouTube — Términos de servicio](https://www.youtube.com/t/terms) · [Términos de la API de YouTube](https://developers.google.com/youtube/terms/api-services-terms-of-service)
-- [Farella Braun + Martel — Qué dicen hiQ v. LinkedIn y otros casos sobre la legalidad del scraping](https://www.fbm.com/publications/what-recent-rulings-in-hiq-v-linkedin-and-other-cases-say-about-the-legality-of-data-scraping/) · [¿Es legal el web scraping? (Apify)](https://use-apify.com/docs/what-is-apify/is-apify-legal)
-- [OpenStreetMap — Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) · [Política de uso de la API (OSMF)](https://operations.osmfoundation.org/policies/api/)
-- CAN-SPAM: [Guía de cumplimiento 2026](https://prospeo.io/s/can-spam-act-email-marketing) · [Requisito de dirección física](https://tomba.io/blog/can-spam-physical-address-requirement) · [Sanciones](https://tomba.io/blog/can-spam-penalties)
+1. **The PLAN's "Company scraper (Google Maps)" — changes source.** The Phase 3 PLAN says
+   literally "Company scraper (Google Maps) end-to-end". The research says it's the worst of the
+   available options: more expensive, more fragile and riskier legally than the public FMCSA
+   census. **I propose changing that PLAN line** to "FMCSA census importer + web enrichment".
+   The owner's call.
+2. **"Scraping is the problem" — false.** The problem is CAN-SPAM-compliant **sending** and the
+   postal address. Getting 5,000 leads is a `curl`; emailing them without exposure to $53,088
+   per message requires infrastructure and a business decision.
+3. **Firecrawl was on the brief's candidate list — it's impossible here.** Its own compose asks
+   for more RAM than the whole VPS ⚠️.
+
+---
+
+## 9. Risks and unknowns (NOT VERIFIED)
+
+1. **⚠️ Real DSP coverage in the FMCSA census.** I know the threshold is 10,001 lb GVWR ✅ and
+   that vans hover around that figure ⚠️, but **I haven't downloaded the file or counted how
+   many real DSPs appear**. It's the first thing to check in Phase 3 — and it's cheap: download,
+   filter by NJ/NY, count.
+2. **⚠️ The exact structure and fields of the FMCSA file**: not downloaded.
+3. **⚠️ Google Maps Platform's specific terms**: the *Service Specific Terms* page returned
+   empty content. The `place_id` rule and the caching ban **are** verified on the policies page
+   ✅; the 30-day period for coordinates **is not**.
+4. **⚠️ Places API prices**: from search results, not the official pricing page.
+5. **⚠️ YouTube's Developer Policies** (§5.3): unread. They affect the cache design.
+6. **⚠️ The $53,088 CAN-SPAM penalty**: from search, not the FTC source. The magnitude is right;
+   the exact figure must be confirmed.
+7. **⚠️ ODbL share-alike**: if we mix OSM into the `leads` table, does that table become subject
+   to the ODbL as a derived database? A real, unanswered question. **Prudent mitigation: keep
+   OSM data in a separate table** and don't merge it into the CRM until it's clarified.
+8. **⚠️ Real RAM use of the Playwright worker**: an estimate, not a measurement.
+9. **This is not legal advice.** A professional review before the first campaign.
+
+---
+
+## Sources
+
+- [FMCSA — Data dissemination program](https://www.fmcsa.dot.gov/registration/fmcsa-data-dissemination-program) · [Company Census File (data.gov)](https://catalog.data.gov/dataset/company-census-file) · [Do I need a USDOT number?](https://www.fmcsa.dot.gov/registration/do-i-need-usdot-number)
+- [Google — Places API policies](https://developers.google.com/maps/documentation/places/web-service/policies) · [Usage and billing](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing) · [Service Specific Terms](https://cloud.google.com/maps-platform/terms/maps-service-terms) (not downloadable in this session)
+- [YouTube — Terms of service](https://www.youtube.com/t/terms) · [YouTube API terms](https://developers.google.com/youtube/terms/api-services-terms-of-service)
+- [Farella Braun + Martel — What hiQ v. LinkedIn and other cases say about the legality of scraping](https://www.fbm.com/publications/what-recent-rulings-in-hiq-v-linkedin-and-other-cases-say-about-the-legality-of-data-scraping/) · [Is web scraping legal? (Apify)](https://use-apify.com/docs/what-is-apify/is-apify-legal)
+- [OpenStreetMap — Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) · [API usage policy (OSMF)](https://operations.osmfoundation.org/policies/api/)
+- CAN-SPAM: [2026 compliance guide](https://prospeo.io/s/can-spam-act-email-marketing) · [Physical address requirement](https://tomba.io/blog/can-spam-physical-address-requirement) · [Penalties](https://tomba.io/blog/can-spam-penalties)
 - [gosom/google-maps-scraper](https://github.com/gosom/google-maps-scraper) · [unclecode/crawl4ai](https://github.com/unclecode/crawl4ai) · [apify/crawlee](https://github.com/apify/crawlee) · [yt-dlp](https://github.com/yt-dlp/yt-dlp)
-- [Firecrawl — SELF_HOST.md](https://github.com/firecrawl/firecrawl/blob/main/SELF_HOST.md) · [Benchmark Firecrawl vs Crawl4AI](https://fastcrw.com/blog/firecrawl-vs-crawl4ai-vs-crw)
-- API de GitHub (estrellas, licencias, fechas) — consultada el 2-ago-2026
+- [Firecrawl — SELF_HOST.md](https://github.com/firecrawl/firecrawl/blob/main/SELF_HOST.md) · [Firecrawl vs Crawl4AI benchmark](https://fastcrw.com/blog/firecrawl-vs-crawl4ai-vs-crw)
+- GitHub API (stars, licenses, dates) — checked on 2-Aug-2026

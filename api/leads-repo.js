@@ -1,8 +1,8 @@
-/* Prospección: todo el SQL en un sitio. Las reglas viven en lead-queue.js y
-   call-window.js; aquí solo se lee y se escribe.
+/* Prospecting: all the SQL in one place. The rules live in lead-queue.js and
+   call-window.js; here we only read and write.
 
-   Recibe el pool como dependencia (crearRepoLeads({ db })) para que las rutas
-   se prueben con un repo falso y el SQL con un Postgres desechable. */
+   It takes the pool as a dependency (crearRepoLeads({ db })) so the routes can
+   be tested with a fake repo and the SQL with a throwaway Postgres. */
 
 import { ordenCola } from './lead-queue.js';
 import { dentroDeHorario, proximaApertura } from './call-window.js';
@@ -27,7 +27,7 @@ export function crearRepoLeads({ db }) {
   }
 
   return {
-    // ── Importaciones ──────────────────────────────────────────
+    // ── Imports ────────────────────────────────────────────────
     async crearRun({ tenant, source, niche, params }) {
       const { rows } = await db.query(
         `INSERT INTO lead_source_run (tenant_id, source, niche, params) VALUES ($1, $2, $3, $4) RETURNING id`,
@@ -43,10 +43,10 @@ export function crearRepoLeads({ db }) {
     },
 
     /**
-     * Crea el run SOLO si los límites lo permiten, en una transacción con un
-     * candado por (tenant, fuente): dos peticiones simultáneas no pueden leer
-     * "0 corriendo" las dos y lanzar dos búsquedas a la vez.
-     * `comprobar(conteo)` es comprobarLimites; devuelve { id } o { bloqueo }.
+     * Creates the run ONLY if the limits allow it, in a transaction with a lock
+     * per (tenant, source): two simultaneous requests can't both read
+     * "0 running" and launch two searches at once.
+     * `comprobar(conteo)` is comprobarLimites; returns { id } or { bloqueo }.
      */
     async crearRunConLimite({ tenant, source, niche, params, comprobar }) {
       return enTransaccion(async (c) => {
@@ -75,7 +75,7 @@ export function crearRepoLeads({ db }) {
       return rows;
     },
 
-    /** Para los límites del scraper: cuántos corren y cuántos se lanzaron en 24 h. */
+    /** For the scraper limits: how many are running and how many were launched in 24 h. */
     async contarRuns({ tenant, source }) {
       const { rows } = await db.query(
         `SELECT count(*) FILTER (WHERE status = 'running' AND started_at > now() - interval '1 hour') AS corriendo,
@@ -85,9 +85,9 @@ export function crearRepoLeads({ db }) {
     },
 
     /**
-     * Upsert por teléfono: un negocio que ya existe se UNE (fuentes, ids, web)
-     * en vez de duplicarse. internal_only solo se queda en true si TODAS las
-     * fuentes eran de scraper. Lo suprimido no entra.
+     * Upsert by phone: a business that already exists is MERGED (sources, ids,
+     * website) instead of duplicated. internal_only only stays true if ALL the
+     * sources were scrapers. Suppressed numbers never get in.
      */
     async guardarLeads({ tenant, niche, source, leads }) {
       return enTransaccion(async (c) => {
@@ -120,11 +120,11 @@ export function crearRepoLeads({ db }) {
       });
     },
 
-    // ── Cola de llamadas ───────────────────────────────────────
+    // ── Call queue ─────────────────────────────────────────────
     /**
-     * Siguiente lead a llamar. El orden lo decide ordenCola (probada); aquí se
-     * filtra por la ventana horaria de CADA lead y se reserva 10 min con un
-     * UPDATE condicional para que dos pestañas no den el mismo.
+     * Next lead to call. The order comes from ordenCola (tested); here we filter
+     * by EACH lead's calling window and reserve it for 10 min with a
+     * conditional UPDATE so two tabs never get the same one.
      */
     async siguienteLead({ tenant, niche, ahora = new Date() }) {
       const { rows } = await db.query(
@@ -168,8 +168,8 @@ export function crearRepoLeads({ db }) {
       return rows;
     },
 
-    // ── Llamadas ───────────────────────────────────────────────
-    /** Aplica un resultado YA validado por reglasDeResultado. */
+    // ── Calls ──────────────────────────────────────────────────
+    /** Applies an outcome ALREADY validated by reglasDeResultado. */
     async registrarLlamada({ tenant, leadId, r, correctsId = null }) {
       return enTransaccion(async (c) => {
         const { rows: ls } = await c.query(
@@ -214,7 +214,7 @@ export function crearRepoLeads({ db }) {
       if (status) add('status = ?', status);
       if (source) add('? = ANY(sources)', source);
       if (q) {
-        // El mismo parámetro sirve para nombre y teléfono; los comodines del usuario se escapan.
+        // The same parameter serves name and phone; the user's wildcards are escaped.
         args.push(`%${String(q).replace(/[\\%_]/g, (m) => `\\${m}`)}%`);
         where.push(`(business_name ILIKE $${args.length} OR phone_e164 LIKE $${args.length})`);
       }
@@ -232,7 +232,7 @@ export function crearRepoLeads({ db }) {
       return rows;
     },
 
-    // ── Guiones ────────────────────────────────────────────────
+    // ── Scripts ────────────────────────────────────────────────
     async guiones(tenant) {
       const { rows } = await db.query(
         'SELECT niche, title, body, updated_at FROM call_script WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY niche', [tenant]);

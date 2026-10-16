@@ -1,21 +1,21 @@
-/* tu empresa — APM · proyectos y health checks (Fase 5).
+/* Acme — APM · projects and health checks (Phase 5).
 
-   Comprueba que las URLs públicas de el dueño responden. NO sustituye al
-   vigilante del host (memoria monitoreo), que mira contenedores por
-   dentro: esto mira desde fuera, que es donde está el usuario. Un contenedor
-   sano detrás de un proxy roto sigue siendo un sitio caído.
+   Checks that the owner's public URLs respond. It does NOT replace the host
+   watchdog, which looks at containers from the inside: this looks from the
+   outside, where the user is. A healthy container behind a broken proxy is
+   still a site that's down.
 
-   Se sondea con HEAD y se cae a GET: algunos servidores contestan 405 a HEAD.
-   Solo se mira que responda, nunca el contenido — comparar HTML daría falsos
-   positivos en cuanto alguien cambie una palabra. */
+   Probes with HEAD and falls back to GET: some servers answer 405 to HEAD.
+   It only checks that it responds, never the content — comparing HTML would
+   give false positives as soon as someone changes a word. */
 
 import { Router } from 'express';
 import { db } from './db.js';
 
 const TIMEOUT_MS = 8_000;
-/* Cada 10 minutos. No es un sistema de alertas: es para que el panel diga la
-   verdad cuando se abre. Más frecuencia solo gastaría CPU en una VPS que ya
-   toca swap. */
+/* Every 10 minutes. It isn't an alerting system: it's so the dashboard tells
+   the truth when you open it. More often would just burn CPU on a VPS that
+   already touches swap. */
 const CADA_MS = 10 * 60 * 1000;
 
 async function sondear(url) {
@@ -28,18 +28,18 @@ async function sondear(url) {
     }
     return { ok: r.status < 400, status: r.status, ms: Date.now() - t0, error: null };
   } catch (e) {
-    /* Un timeout es indistinguible de "caído" para quien lo usa, así que se
-       registra como fallo con el motivo, no se descarta. */
+    /* A timeout is indistinguishable from "down" for whoever uses it, so it's
+       recorded as a failure with the reason, not discarded. */
     return { ok: false, status: null, ms: Date.now() - t0, error: e.name === 'TimeoutError'
-      ? `sin respuesta en ${TIMEOUT_MS / 1000}s` : e.message };
+      ? `no response within ${TIMEOUT_MS / 1000}s` : e.message };
   }
 }
 
 export async function comprobarTodos() {
   const { rows } = await db.query(
     'SELECT id, url FROM project WHERE archived_at IS NULL');
-  /* En paralelo: son cuatro URLs y secuencial multiplicaría el timeout por
-     cuatro en el peor caso. */
+  /* In parallel: there are four URLs, and doing them one by one would multiply
+     the timeout by four in the worst case. */
   const res = await Promise.all(rows.map(async (p) => ({ p, r: await sondear(p.url) })));
   for (const { p, r } of res) {
     await db.query(
@@ -54,8 +54,8 @@ export function rutasProyectos(auth) {
 
   r.get('/api/projects', auth, async (_req, res) => {
     try {
-      /* DISTINCT ON es la forma barata en Postgres de traer "la última fila de
-         cada grupo" sin subconsulta por proyecto. */
+      /* DISTINCT ON is Postgres's cheap way to get "the latest row of each
+         group" without a subquery per project. */
       const { rows } = await db.query(
         `SELECT p.id, p.name, p.url, p.kind, p.area, c.ok, c.status, c.ms, c.error, c.created_at
            FROM project p
@@ -73,18 +73,18 @@ export function rutasProyectos(auth) {
       })));
     } catch (e) {
       console.error('projects:', e.message);
-      res.status(500).json({ error: { code: 'db_error', message: 'no pude leer los proyectos' } });
+      res.status(500).json({ error: { code: 'db_error', message: 'could not read the projects' } });
     }
   });
 
-  /* Comprobar ahora. Existe porque tras un despliegue nadie quiere esperar
-     diez minutos para saber si lo rompió. */
+  /* Check now. It exists because after a deploy nobody wants to wait ten
+     minutes to find out whether they broke it. */
   r.post('/api/projects/check', auth, async (_req, res) => {
     try {
       res.json({ ok: true, comprobados: await comprobarTodos() });
     } catch (e) {
       console.error('check now:', e.message);
-      res.status(500).json({ error: { code: 'check_error', message: 'no pude comprobar' } });
+      res.status(500).json({ error: { code: 'check_error', message: 'could not run the check' } });
     }
   });
 
@@ -100,19 +100,19 @@ export function rutasProyectos(auth) {
       res.status(201).json({ id: rows[0].id });
     } catch (e) {
       if (e.code === '23505') {
-        return res.status(409).json({ error: { code: 'ya_existe', message: 'esa URL ya está registrada' } });
+        return res.status(409).json({ error: { code: 'ya_existe', message: 'that URL is already registered' } });
       }
       console.error('crear project:', e.message);
-      res.status(500).json({ error: { code: 'db_error', message: 'no pude guardarlo' } });
+      res.status(500).json({ error: { code: 'db_error', message: 'could not save it' } });
     }
   });
 
   return r;
 }
 
-/* El intervalo arranca con el servidor. `unref()` para que no impida que el
-   proceso termine si alguien lo para: un temporizador no debe mantener vivo
-   un contenedor que se está apagando. */
+/* The interval starts with the server. `unref()` so it doesn't stop the
+   process from exiting if someone stops it: a timer must not keep a container
+   alive while it's shutting down. */
 export function arrancarVigilancia() {
   setTimeout(() => comprobarTodos().catch(() => {}), 5_000).unref();
   setInterval(() => comprobarTodos().catch(() => {}), CADA_MS).unref();

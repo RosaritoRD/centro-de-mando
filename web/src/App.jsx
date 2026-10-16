@@ -5,22 +5,23 @@ import Approvals from './Approvals.jsx';
 import Areas from './Areas.jsx';
 import Autos from './Autos.jsx';
 import Leads from './Leads.jsx';
+import { t, tn, LANG, LOCALE, setLang } from './i18n.js';
 
-/* tu-dominio.com, no tu-dominio.com: la cookie `__session` la emite tu web principal con
-   Domain derivado de SU APP_BASE_URL, que el 14/08 pasó a tu-dominio.com. Una
-   cookie de .tu-dominio.com no viaja a apm.tu-dominio.com, así que APM en el
-   dominio viejo no puede autenticar NUNCA — 401 en bucle. Este dominio y el de
-   la cookie tienen que ser el mismo registrable. */
-const SIGNIN = 'https://signin.tu-dominio.com/?step=login';
+/* your-domain.com, not your-domain.com: your main website issues the `__session` cookie
+   with a Domain derived from ITS APP_BASE_URL, which moved to your-domain.com on
+   14/08. A .your-domain.com cookie never travels to apm.your-domain.com, so APM on
+   the old domain can NEVER authenticate — a 401 loop. This domain and the
+   cookie's must be the same registrable domain. */
+const SIGNIN = 'https://signin.your-domain.com/?step=login';
 
 const AREAS = [
-  { id: 'overview', label: 'Resumen', description: 'Lo que está en marcha y lo que necesita tu atención.' },
-  { id: 'chat', label: 'Asistente', description: 'Delega una tarea y sigue cada paso de tus agentes.' },
-  { id: 'approvals', label: 'Aprobaciones', description: 'Revisa las acciones que esperan tu decisión.' },
-  { id: 'leads', label: 'Prospección', description: 'Encuentra contactos, prepara llamadas y registra resultados.' },
-  { id: 'areas', label: 'Proyectos', description: 'Comprueba la disponibilidad de tus sitios y servicios.' },
-  { id: 'autos', label: 'Automatizaciones', description: 'Supervisa tus flujos y detecta interrupciones.' },
-  { id: 'inbox', label: 'Bandeja de entrada', description: 'Tus conversaciones, en un solo lugar.', upcoming: true }
+  { id: 'overview', label: t('Overview'), description: t("What's running and what needs your attention.") },
+  { id: 'chat', label: t('Assistant'), description: t('Delegate a task and follow every step your agents take.') },
+  { id: 'approvals', label: t('Approvals'), description: t('Review the actions waiting for your decision.') },
+  { id: 'leads', label: t('Prospecting'), description: t('Find contacts, prepare calls and log results.') },
+  { id: 'areas', label: t('Projects'), description: t('Check that your sites and services are up.') },
+  { id: 'autos', label: t('Automations'), description: t('Watch your workflows and catch interruptions.') },
+  { id: 'inbox', label: t('Inbox'), description: t('All your conversations in one place.'), upcoming: true }
 ];
 
 function Icon({ name }) {
@@ -49,32 +50,29 @@ function useTheme() {
   useEffect(() => {
     document.body.dataset.theme = theme;
     document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem('apm-theme', theme); } catch { /* sin storage */ }
+    try { localStorage.setItem('apm-theme', theme); } catch { /* no storage */ }
   }, [theme]);
-  return [theme, () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))];
+  return [theme, () => setTheme((x) => (x === 'dark' ? 'light' : 'dark'))];
 }
 
 function Gate({ motivo }) {
-  /* Dos motivos distintos, dos mensajes distintos. Un 403 mandado a la
-     pantalla de login produce un bucle: el usuario se identifica bien, vuelve,
-     y lo vuelven a echar. Eso ya pasó una vez en el panel de tu web. */
+  /* Two different reasons, two different messages. A 403 sent to the login
+     screen creates a loop: the user signs in fine, comes back and gets thrown
+     out again. That already happened once in your website's dashboard. */
   const sinSesion = motivo === 'no_session' || motivo === 'invalid_session';
   const sinConexion = motivo === 'network' || motivo === 'error';
   return (
     <div className="gate">
       <div className="card">
         <h1>APM</h1>
-        {sinConexion ? <><p>No se pudo conectar con APM. Vuelve a intentarlo en unos momentos.</p><button className="btn" onClick={() => window.location.reload()}>Reintentar</button></> : sinSesion ? (
+        {sinConexion ? <><p>{t('Could not connect to APM. Try again in a moment.')}</p><button className="btn" onClick={() => window.location.reload()}>{t('Retry')}</button></> : sinSesion ? (
           <>
-            <p>Tu sesión no está activa o caducó.</p>
-            <a className="btn" href={SIGNIN}>Identificarme</a>
+            <p>{t('Your session is not active or has expired.')}</p>
+            <a className="btn" href={SIGNIN}>{t('Sign in')}</a>
           </>
         ) : (
           <>
-            <p>
-              Tu cuenta es válida, pero no está autorizada para el centro de mando.
-              APM es de una sola persona.
-            </p>
+            <p>{t('Your account is valid, but it is not authorized for the command center. APM belongs to a single person.')}</p>
             <p className="mono">{motivo}</p>
           </>
         )}
@@ -87,52 +85,52 @@ function Overview({ me, budget, health, runs, pending, go, refreshing }) {
   const pct = budget && budget.limitUsd > 0
     ? Math.max(0, Math.min(100, Math.round((budget.spentUsd / budget.limitUsd) * 100))) : 0;
   const approvals = pending?.length;
-  const statuses = { done: 'Completada', failed: 'Con error', running: 'En curso', queued: 'En cola', awaiting_approval: 'Espera aprobación', interrupted: 'Interrumpida' };
+  const statuses = { done: t('Done'), failed: t('Failed'), running: t('Running'), queued: t('Queued'), awaiting_approval: t('Awaiting approval'), interrupted: t('Interrupted') };
   return (
     <>
-      <section className="command-brief" aria-label="Siguiente acción">
+      <section className="command-brief" aria-label={t('Next action')}>
         <div className="brief-icon"><Icon name={approvals ? 'approvals' : 'chat'} /></div>
         <div className="brief-copy">
-          <p className="eyebrow">TU SIGUIENTE PASO</p>
-          <h2>{pending === null ? 'Pon tus proyectos en marcha' : approvals ? `${approvals} ${approvals === 1 ? 'acción espera' : 'acciones esperan'} tu aprobación` : 'Todo listo para tu próxima tarea'}</h2>
-          <p>{approvals ? 'Tus agentes necesitan una decisión para continuar.' : 'Abre el asistente para delegar o continúa con tu prospección.'}</p>
+          <p className="eyebrow">{t('YOUR NEXT STEP')}</p>
+          <h2>{pending === null ? t('Get your projects going') : approvals ? tn(approvals, '{n} action is waiting for your approval', '{n} actions are waiting for your approval') : t('All set for your next task')}</h2>
+          <p>{approvals ? t('Your agents need a decision to continue.') : t('Open the assistant to delegate, or carry on with your prospecting.')}</p>
         </div>
         <button className="btn" onClick={() => go(approvals ? 'approvals' : 'chat')}>
-          {approvals ? 'Revisar aprobaciones' : 'Abrir asistente'} <Icon name="arrow" />
+          {approvals ? t('Review approvals') : t('Open assistant')} <Icon name="arrow" />
         </button>
       </section>
 
       <div className="grid metrics-grid">
         <article className="card metric-card">
-          <h3>Presupuesto de hoy <span className="metric-unit">USD</span></h3>
+          <h3>{t("Today's budget")} <span className="metric-unit">USD</span></h3>
           <div className="big">{budget ? `$${budget.spentUsd.toFixed(2)}` : '—'} <span>/ {budget ? `$${budget.limitUsd.toFixed(2)}` : '—'}</span></div>
-          <div className="bar" role="progressbar" aria-label="Presupuesto utilizado" aria-valuemin={0} aria-valuemax={100} aria-valuenow={budget ? pct : undefined}><i style={{ width: `${pct}%` }} /></div>
-          <div className="sub">{budget ? `$${budget.remainingUsd.toFixed(2)} disponibles · ${pct}% utilizado` : refreshing ? 'Cargando presupuesto…' : 'Presupuesto no disponible'}</div>
+          <div className="bar" role="progressbar" aria-label={t('Budget used')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={budget ? pct : undefined}><i style={{ width: `${pct}%` }} /></div>
+          <div className="sub">{budget ? t('{left} available · {pct}% used', { left: `$${budget.remainingUsd.toFixed(2)}`, pct }) : refreshing ? t('Loading budget…') : t('Budget unavailable')}</div>
         </article>
         <article className="card metric-card">
-          <h3>Agentes trabajando <Icon name="autos" /></h3>
+          <h3>{t('Agents working')} <Icon name="autos" /></h3>
           <div className="big">{runs?.vivas ?? '—'} <span>/ {me.limits.maxConcurrentRuns}</span></div>
-          <div className="sub">Ejecuciones activas / límite simultáneo</div>
+          <div className="sub">{t('Active runs / concurrency limit')}</div>
         </article>
         <article className="card metric-card">
-          <h3>Estado del sistema <span className={'punto ' + (health?.ok ? 'vivo' : health ? 'malo' : '')} /></h3>
-          <div className="system-state">{health ? (health.ok ? 'Operativo' : 'Requiere atención') : refreshing ? 'Comprobando…' : 'Sin datos'}</div>
-          <div className="sub">{health ? (health.db === 'up' ? 'Base de datos conectada' : 'Revisar conexión con la base de datos') : refreshing ? 'Consultando servicios' : 'No se pudo comprobar el estado'}</div>
+          <h3>{t('System status')} <span className={'punto ' + (health?.ok ? 'vivo' : health ? 'malo' : '')} /></h3>
+          <div className="system-state">{health ? (health.ok ? t('Operational') : t('Needs attention')) : refreshing ? t('Checking…') : t('No data')}</div>
+          <div className="sub">{health ? (health.db === 'up' ? t('Database connected') : t('Check the database connection')) : refreshing ? t('Querying services') : t('Could not check the status')}</div>
         </article>
       </div>
 
       <section className="workspace-section">
-        <div className="section-heading"><h2>Accesos de trabajo</h2><span>Continúa donde lo dejaste</span></div>
+        <div className="section-heading"><h2>{t('Work shortcuts')}</h2><span>{t('Pick up where you left off')}</span></div>
         <div className="work-shortcuts">
-          {[['leads', 'Preparar llamadas', 'Contactos, guiones y seguimiento'], ['areas', 'Revisar proyectos', 'Disponibilidad de tus servicios'], ['autos', 'Ver automatizaciones', 'Flujos activos y últimas ejecuciones']].map(([id, title, text]) => (
+          {[['leads', t('Prepare calls'), t('Contacts, scripts and follow-up')], ['areas', t('Review projects'), t('Availability of your services')], ['autos', t('View automations'), t('Active workflows and latest executions')]].map(([id, title, text]) => (
             <button className="work-shortcut" key={id} onClick={() => go(id)}><span className="shortcut-icon"><Icon name={id} /></span><span><strong>{title}</strong><small>{text}</small></span><Icon name="arrow" /></button>
           ))}
         </div>
       </section>
       <section className="workspace-section">
-        <div className="section-heading"><h2>Actividad reciente</h2><button className="text-action" onClick={() => go('chat')}>Ver conversaciones <Icon name="arrow" /></button></div>
-        {runs === null && refreshing ? <div className="empty" role="status">Cargando actividad…</div> : runs === null ? <div className="empty"><strong>No se pudo cargar la actividad.</strong>Pulsa Actualizar para volver a intentarlo.</div>
-          : runs.runs.length === 0 ? <div className="empty"><strong>Tu primera tarea empieza en el asistente.</strong>Pídele que revise un proyecto o te ayude a preparar una llamada.<button className="text-action" onClick={() => go('chat')}>Crear una conversación <Icon name="arrow" /></button></div>
+        <div className="section-heading"><h2>{t('Recent activity')}</h2><button className="text-action" onClick={() => go('chat')}>{t('View conversations')} <Icon name="arrow" /></button></div>
+        {runs === null && refreshing ? <div className="empty" role="status">{t('Loading activity…')}</div> : runs === null ? <div className="empty"><strong>{t('Could not load the activity.')}</strong>{t('Press Refresh to try again.')}</div>
+          : runs.runs.length === 0 ? <div className="empty"><strong>{t('Your first task starts in the assistant.')}</strong>{t('Ask it to check a project or help you prepare a call.')}<button className="text-action" onClick={() => go('chat')}>{t('Start a conversation')} <Icon name="arrow" /></button></div>
           : <div className="lista recent-runs">{runs.runs.map((r) => <div key={r.id} className="fila">
             <span className={'chip ' + (r.status === 'done' ? 'ok' : r.status === 'failed' ? 'bad' : '')}>{statuses[r.status] || r.status}</span>
             <span className="titulo">{r.title}</span><span className="mono">${r.costUsd.toFixed(4)}</span>
@@ -142,9 +140,9 @@ function Overview({ me, budget, health, runs, pending, go, refreshing }) {
   );
 }
 
-/* Cada cuánto se relee el panel entero. Un minuto y no cinco segundos: lo que
-   se mira aquí (presupuesto del día, salud de los sitios, workflows de n8n)
-   cambia en minutos, y APM se deja abierto en una pestaña durante horas. */
+/* How often the whole dashboard is re-read. One minute, not five seconds: what
+   you look at here (daily budget, site health, n8n workflows) changes over
+   minutes, and APM is left open in a tab for hours. */
 const CADA_MS = 60_000;
 
 export default function App() {
@@ -174,10 +172,10 @@ export default function App() {
   useEffect(() => {
     document.title = `${AREAS.find((a) => a.id === tab).label} · APM`;
   }, [tab]);
-  /* Un contador y no una función: se le pasa a cada pestaña como prop y cada
-     una lo mete en las dependencias de su efecto. Así "actualizar" actualiza
-     TODO —resumen, sitios, n8n, aprobaciones— sin que el shell tenga que
-     saber qué carga cada pestaña. */
+  /* A counter, not a function: it's passed to each tab as a prop and each one
+     puts it in its effect's dependencies. That way "refresh" refreshes
+     EVERYTHING — overview, sites, n8n, approvals — without the shell having to
+     know what each tab loads. */
   const [refresco, setRefresco] = useState(0);
 
   useEffect(() => {
@@ -196,8 +194,8 @@ export default function App() {
     return () => { vivo = false; };
   }, []);
 
-  /* La salud, el presupuesto y las ejecuciones vivas no bloquean la pantalla:
-     si fallan, el panel se ve igual con guiones en vez de números. */
+  /* Health, budget and live runs don't block the screen: if they fail, the
+     dashboard still renders with dashes instead of numbers. */
   useEffect(() => {
     if (estado.fase !== 'dentro') return undefined;
     let vivo = true;
@@ -218,61 +216,62 @@ export default function App() {
     return () => { vivo = false; };
   }, [estado.fase, refresco]);
 
-  /* Refresco solo con la pestaña a la vista. En el móvil, APM se queda
-     abierto en segundo plano días enteros: sin esta condición serían miles de
-     peticiones al día para pintar algo que nadie está mirando. */
+  /* Refresh only while the tab is visible. On a phone, APM stays open in the
+     background for days: without this check it would be thousands of requests
+     a day to render something nobody is looking at. */
   useEffect(() => {
     if (estado.fase !== 'dentro') return undefined;
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       if (document.visibilityState === 'visible') setRefresco((n) => n + 1);
     }, CADA_MS);
     const alVolver = () => {
       if (document.visibilityState === 'visible') setRefresco((n) => n + 1);
     };
     document.addEventListener('visibilitychange', alVolver);
-    return () => { clearInterval(t); document.removeEventListener('visibilitychange', alVolver); };
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', alVolver); };
   }, [estado.fase]);
 
   if (estado.fase === 'cargando') {
-    return <div className="gate"><div className="card"><p>Cargando…</p></div></div>;
+    return <div className="gate"><div className="card"><p>{t('Loading…')}</p></div></div>;
   }
   if (estado.fase === 'fuera') return <Gate motivo={estado.motivo} />;
 
   const area = AREAS.find((a) => a.id === tab);
   return (
     <div className="apm-shell">
-      <a href="#main-content" className="skip-link">Saltar al contenido</a>
+      <a href="#main-content" className="skip-link">{t('Skip to content')}</a>
       <aside className="workspace-sidebar">
-        <a className="workspace-brand" href="#overview"><span className="brand-symbol"><Icon name="overview" /></span><span className="brand">tu empresa <span>APM</span><small>Centro de mando</small></span></a>
-        <p className="nav-caption">ESPACIO DE TRABAJO</p>
-        <nav className="workspace-nav" aria-label="Navegación principal">
+        <a className="workspace-brand" href="#overview"><span className="brand-symbol"><Icon name="overview" /></span><span className="brand">Acme <span>APM</span><small>{t('Command center')}</small></span></a>
+        <p className="nav-caption">{t('WORKSPACE')}</p>
+        <nav className="workspace-nav" aria-label={t('Main navigation')}>
           {AREAS.map((a) => <button key={a.id} onClick={() => go(a.id)} aria-current={tab === a.id ? 'page' : undefined}>
             <Icon name={a.id} /><span>{a.label}</span>
             {a.id === 'approvals' && pending?.length > 0 && <b className="nav-count">{pending.length}</b>}
-            {a.upcoming && <small>Pronto</small>}
+            {a.upcoming && <small>{t('Soon')}</small>}
           </button>)}
         </nav>
-        <div className="workspace-footer"><span className="workspace-avatar">K</span><div><strong>tu empresa</strong><small>Espacio personal</small></div><span className={'punto ' + (health?.ok ? 'vivo' : '')} /></div>
+        <div className="workspace-footer"><span className="workspace-avatar">K</span><div><strong>Acme</strong><small>{t('Personal workspace')}</small></div><span className={'punto ' + (health?.ok ? 'vivo' : '')} /></div>
       </aside>
       <div className="workspace-body">
         <header className="workspace-topbar">
-          <div className="breadcrumb">Centro de mando <span>/</span> <strong>{area.label}</strong></div>
+          <div className="breadcrumb">{t('Command center')} <span>/</span> <strong>{area.label}</strong></div>
           <div className="header-tools">
-            <span className={'chip ' + (health ? (health.ok ? 'ok' : 'bad') : '')}>{health ? (health.ok ? 'Operativo' : 'Requiere atención') : 'Sin datos'}</span>
-            <button className="iconbtn" onClick={() => setRefresco((n) => n + 1)} disabled={refreshing} aria-label="Actualizar todo" title="Actualizar todo"><span className={refreshing ? 'is-refreshing' : ''}><Icon name="refresh" /></span></button>
-            <button className="iconbtn" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'} title={theme === 'dark' ? 'Tema claro' : 'Tema oscuro'}>{theme === 'dark' ? '☀' : '☾'}</button>
+            <span className={'chip ' + (health ? (health.ok ? 'ok' : 'bad') : '')}>{health ? (health.ok ? t('Operational') : t('Needs attention')) : t('No data')}</span>
+            <button className="iconbtn" onClick={() => setRefresco((n) => n + 1)} disabled={refreshing} aria-label={t('Refresh everything')} title={t('Refresh everything')}><span className={refreshing ? 'is-refreshing' : ''}><Icon name="refresh" /></span></button>
+            <button className="iconbtn" onClick={toggleTheme} aria-label={theme === 'dark' ? t('Switch to light theme') : t('Switch to dark theme')} title={theme === 'dark' ? t('Light theme') : t('Dark theme')}>{theme === 'dark' ? '☀' : '☾'}</button>
+            <button className="iconbtn" onClick={() => setLang(LANG === 'es' ? 'en' : 'es')} aria-label={t('Language')} title={t('Language')}>{LANG === 'es' ? 'EN' : 'ES'}</button>
           </div>
         </header>
         <main id="main-content" className="workspace-main" tabIndex={-1}>
-          <div className="page-heading"><div><p className="eyebrow">{tab === 'overview' ? 'TU OPERACIÓN, DE UN VISTAZO' : 'CENTRO DE MANDO'}</p><h1>{area.label}</h1><p>{area.description}</p></div><span className="sync-label" role="status">{refreshing ? 'Actualizando…' : loadError ? 'Actualización incompleta' : updatedAt ? `Actualizado ${updatedAt.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}` : 'Esperando datos'}</span></div>
-          {loadError && <div className="aviso" role="alert">No se pudieron cargar algunos datos. <button className="text-action" onClick={() => setRefresco((n) => n + 1)}>Reintentar</button></div>}
+          <div className="page-heading"><div><p className="eyebrow">{tab === 'overview' ? t('YOUR OPERATION AT A GLANCE') : t('COMMAND CENTER')}</p><h1>{area.label}</h1><p>{area.description}</p></div><span className="sync-label" role="status">{refreshing ? t('Updating…') : loadError ? t('Partial update') : updatedAt ? t('Updated {time}', { time: updatedAt.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' }) }) : t('Waiting for data')}</span></div>
+          {loadError && <div className="aviso" role="alert">{t('Some data could not be loaded.')} <button className="text-action" onClick={() => setRefresco((n) => n + 1)}>{t('Retry')}</button></div>}
           {tab === 'overview' ? <Overview me={estado.me} budget={budget} health={health} runs={runs} pending={pending} go={go} refreshing={refreshing} />
             : tab === 'chat' ? <Chat refresco={refresco} />
             : tab === 'approvals' ? <Approvals refresco={refresco} />
             : tab === 'areas' ? <Areas refresco={refresco} />
             : tab === 'autos' ? <Autos refresco={refresco} />
             : tab === 'leads' ? <Leads refresco={refresco} />
-            : <div className="empty"><strong>La bandeja de entrada estará disponible próximamente.</strong>Mientras tanto, puedes consultar las conversaciones con tus agentes en el asistente.<button className="text-action" onClick={() => go('chat')}>Abrir asistente <Icon name="arrow" /></button></div>}
+            : <div className="empty"><strong>{t('The inbox will be available soon.')}</strong>{t('In the meantime, you can see your conversations with your agents in the assistant.')}<button className="text-action" onClick={() => go('chat')}>{t('Open assistant')} <Icon name="arrow" /></button></div>}
         </main>
       </div>
     </div>

@@ -1,17 +1,17 @@
-/* Prueba de humo de la Fase 2, DENTRO del contenedor apm-api.
+/* Phase 2 smoke test, INSIDE the apm-api container.
 
-   No pasa por HTTP a propósito: las rutas exigen cookie de Firebase y lo que
-   hay que verificar aquí es el runtime, no el guard. Recorre el ciclo entero:
+   It skips HTTP on purpose: the routes require a Firebase cookie, and what
+   must be verified here is the runtime, not the guard. It walks the whole cycle:
 
-     crear ejecución → el agente pide escribir → se DIFIERE
-     → aparece la aprobación pendiente → se aprueba
-     → reanuda → el archivo existe de verdad
+     create run → the agent asks to write → it's DEFERRED
+     → the pending approval shows up → it's approved
+     → it resumes → the file really exists
 
-   El veredicto es el ARCHIVO en disco, nunca el `terminal_reason` ni lo que
-   diga el modelo (lección de SPIKE-01: un turno puede terminar `completed`,
-   sin error, con el agente disculpándose, sin haber hecho nada).
+   The verdict is the FILE on disk, never the `terminal_reason` or what the
+   model says (lesson from SPIKE-01: a turn can end `completed`, with no error,
+   the agent apologizing, having done nothing).
 
-   Se copia y se corre con tools/smoke-fase2.sh. Cuesta ~$0.05 con haiku. */
+   Copy it into the container and run it. Costs ~$0.05 with haiku. */
 
 import fs from 'node:fs';
 import { db } from '/app/db.js';
@@ -25,16 +25,16 @@ async function estadoDe(id) {
   return rows[0];
 }
 
-/* Sondea hasta que la ejecución llegue a uno de los estados esperados. El
-   bucle del agente es asíncrono: sin esto la prueba leería el estado inicial
-   y daría un falso negativo. */
+/* Polls until the run reaches one of the expected states. The agent loop is
+   asynchronous: without this the test would read the initial state and give a
+   false negative. */
 async function esperarEstado(id, estados, segundos = 120) {
   for (let i = 0; i < segundos * 2; i++) {
     const s = await estadoDe(id);
     if (estados.includes(s.status)) return s;
     await espera(500);
   }
-  throw new Error(`la ejecución ${id} no llegó a ${estados.join('|')} en ${segundos}s`);
+  throw new Error(`run ${id} did not reach ${estados.join('|')} within ${segundos}s`);
 }
 
 let fallos = 0;
@@ -45,59 +45,59 @@ const check = (ok, etiqueta, detalle = '') => {
 
 try {
   fs.rmSync(DESTINO, { force: true });
-  console.log('── 1. Crear ejecución que necesita permiso ──');
+  console.log('── 1. Create a run that needs permission ──');
 
   const run = await crearRun({
-    prompt: `Escribe el texto "apm fase 2 ok" en el archivo ${DESTINO}. Usa la herramienta Write.`,
+    prompt: `Write the text "apm phase 2 ok" to the file ${DESTINO}. Use the Write tool.`,
     model: 'claude-haiku-4-5',
     budgetUsd: 0.5,
-    title: 'smoke fase 2'
+    title: 'smoke phase 2'
   });
   console.log('  run:', run.id);
 
   const s1 = await esperarEstado(run.id, ['awaiting_approval', 'failed', 'done']);
-  check(s1.status === 'awaiting_approval', 'la ejecución se PARA a pedir permiso', s1.status);
-  check(!fs.existsSync(DESTINO), 'el archivo NO existe antes de aprobar');
+  check(s1.status === 'awaiting_approval', 'the run STOPS to ask for permission', s1.status);
+  check(!fs.existsSync(DESTINO), 'the file does NOT exist before approving');
 
-  console.log('── 2. La aprobación pendiente ──');
+  console.log('── 2. The pending approval ──');
   const { rows: aps } = await db.query(
     'SELECT id, tool_name, summary FROM approval WHERE run_id = $1 AND decision IS NULL', [run.id]);
-  check(aps.length === 1, 'hay exactamente 1 aprobación pendiente', String(aps.length));
+  check(aps.length === 1, 'there is exactly 1 pending approval', String(aps.length));
   if (aps[0]) {
-    check(aps[0].tool_name === 'Write', 'la herramienta es la correcta', aps[0].tool_name);
-    check(Boolean(aps[0].summary), 'trae resumen legible', aps[0].summary || '(vacío)');
+    check(aps[0].tool_name === 'Write', 'the tool is the right one', aps[0].tool_name);
+    check(Boolean(aps[0].summary), 'it has a readable summary', aps[0].summary || '(empty)');
   }
 
-  console.log('── 3. Aprobar y reanudar ──');
+  console.log('── 3. Approve and resume ──');
   const out = await decidir(aps[0].id, 'allow');
-  check(out?.resumed === true, 'la decisión reanuda la ejecución');
+  check(out?.resumed === true, 'the decision resumes the run');
 
   const s2 = await esperarEstado(run.id, ['done', 'failed']);
-  check(s2.status === 'done', 'la ejecución termina bien', s2.error || s2.status);
+  check(s2.status === 'done', 'the run finishes fine', s2.error || s2.status);
 
   const existe = fs.existsSync(DESTINO);
-  check(existe, 'EL EFECTO OCURRIÓ: el archivo existe',
-    existe ? JSON.stringify(fs.readFileSync(DESTINO, 'utf8').trim()) : 'no está');
+  check(existe, 'THE EFFECT HAPPENED: the file exists',
+    existe ? JSON.stringify(fs.readFileSync(DESTINO, 'utf8').trim()) : 'missing');
 
-  console.log('── 4. Coste y transcript ──');
+  console.log('── 4. Cost and transcript ──');
   const { rows: [c] } = await db.query(
     'SELECT coalesce(sum(cost_usd),0) AS t FROM run_cost WHERE run_id = $1', [run.id]);
-  check(Number(c.t) > 0, 'se anotó el coste', `$${Number(c.t).toFixed(6)}`);
+  check(Number(c.t) > 0, 'the cost was recorded', `$${Number(c.t).toFixed(6)}`);
 
   const { rows: [e] } = await db.query(
     'SELECT count(*)::int AS n FROM session_entry WHERE session_id = $1', [run.session_id || '']);
   const { rows: [r2] } = await db.query('SELECT session_id FROM run WHERE id = $1', [run.id]);
   const { rows: [e2] } = await db.query(
     'SELECT count(*)::int AS n FROM session_entry WHERE session_id = $1', [r2.session_id]);
-  check(e2.n > 0, 'el transcript se replicó en Postgres', `${e2.n} entradas`);
+  check(e2.n > 0, 'the transcript was mirrored to Postgres', `${e2.n} entries`);
 
   const { rows: [ev] } = await db.query(
     'SELECT count(*)::int AS n FROM run_event WHERE run_id = $1', [run.id]);
-  check(ev.n > 0, 'hay log de eventos append-only', `${ev.n} eventos`);
+  check(ev.n > 0, 'there is an append-only event log', `${ev.n} events`);
 
   console.log(fallos === 0
-    ? '\n>>> FASE 2 OK: el ciclo de aprobación funciona de punta a punta'
-    : `\n>>> ${fallos} COMPROBACIONES FALLIDAS`);
+    ? '\n>>> PHASE 2 OK: the approval cycle works end to end'
+    : `\n>>> ${fallos} CHECKS FAILED`);
 } catch (err) {
   console.error('\n>>> ERROR:', err.message);
   fallos++;

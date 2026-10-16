@@ -1,54 +1,53 @@
-# SPIKE 01 — ¿sobrevive una aprobación diferida al reinicio del proceso?
+# SPIKE 01 — does a deferred approval survive a process restart?
 
-**Fecha:** 2026-08-03 · **Riesgo nº1 del proyecto** (`RESEARCH.md` §7) · **Coste:** ~$0.15
-**Código:** `spike/defer-survives/` — se puede volver a correr.
-
----
-
-## Veredicto
-
-> **SÍ sobrevive.** Un proceso difiere la herramienta, muere, y **otro proceso
-> distinto** reanuda por `session_id`, aprueba, y **la herramienta se ejecuta de
-> verdad**. La arquitectura de aprobaciones de `ARCHITECTURE.md` §2 se mantiene.
-
-**Pero con una condición que no estaba en el diseño y que lo cambia:**
-
-> ⚠️ **Las herramientas de APM NO pueden ser un `createSdkMcpServer` in-process
-> si van a pasar por aprobación.** Al reanudar, los servidores MCP de tipo `sdk`
-> **no se reconectan**, la herramienta desaparece del prompt, y la ejecución
-> diferida **se pierde en silencio**.
+**Date:** 2026-08-03 · **The project's #1 risk** (`RESEARCH.md` §7) · **Cost:** ~$0.15
+**Code:** `spike/defer-survives/` — can be re-run.
 
 ---
 
-## Qué se probó, exactamente
+## Verdict
 
-Dos procesos separados de verdad (`node a.mjs`, el proceso muere, `node b.mjs`),
-no dos llamadas dentro del mismo. El efecto observable es un **archivo en disco**,
-no lo que el modelo dice que hizo: si el modelo contesta "listo, registrado" y el
-archivo está vacío, la respuesta es NO.
+> **YES, it survives.** One process defers the tool, dies, and **a different
+> process** resumes by `session_id`, approves, and **the tool really runs**. The
+> approval architecture in `ARCHITECTURE.md` §2 holds.
 
-| Prueba | Herramienta | A difiere | B reanuda y aprueba | ¿Se ejecutó? |
+**But with a condition that wasn't in the design, and it changes things:**
+
+> ⚠️ **APM's tools CANNOT be an in-process `createSdkMcpServer` if they go
+> through approval.** On resume, `sdk`-type MCP servers **don't reconnect**, the
+> tool disappears from the prompt, and the deferred run **is silently lost**.
+
+---
+
+## What exactly was tested
+
+Two genuinely separate processes (`node a.mjs`, the process dies, `node b.mjs`),
+not two calls inside the same one. The observable effect is a **file on disk**,
+not what the model says it did: if the model answers "done, logged" and the file
+is empty, the answer is NO.
+
+| Test | Tool | A defers | B resumes and approves | Did it run? |
 |---|---|---|---|---|
-| 1 | MCP in-process (`createSdkMcpServer`) | ✅ `tool_deferred` | reanuda | ❌ **No** |
-| 2 | ídem + `alwaysLoad: true` | ✅ | reanuda | ❌ No |
-| 3 | ídem + `forkSession: true` | ✅ | reanuda | ❌ No |
-| 4 | ídem, prompt vacío vs `"Continúa."` | ✅ | reanuda | ❌ No en ninguno |
-| **5** | **Integrada (`Write`)** | ✅ `tool_deferred` | reanuda | ✅ **Sí** |
+| 1 | In-process MCP (`createSdkMcpServer`) | ✅ `tool_deferred` | resumes | ❌ **No** |
+| 2 | same + `alwaysLoad: true` | ✅ | resumes | ❌ No |
+| 3 | same + `forkSession: true` | ✅ | resumes | ❌ No |
+| 4 | same, empty prompt vs `"Continue."` | ✅ | resumes | ❌ No in either |
+| **5** | **Built-in (`Write`)** | ✅ `tool_deferred` | resumes | ✅ **Yes** |
 
-La prueba 5 es la que zanja el asunto: **el mecanismo `defer`/`resume` funciona**.
+Test 5 settles it: **the `defer`/`resume` mechanism works**.
 
 ---
 
-## La causa, medida y no deducida
+## The cause, measured rather than deduced
 
-Mismo código, mismas opciones. La **única** diferencia es pasar `resume`:
+Same code, same options. The **only** difference is passing `resume`:
 
-| | `init.mcp_servers` | ¿ve la herramienta? |
+| | `init.mcp_servers` | sees the tool? |
 |---|---|---|
-| Proceso A (sesión nueva) | `[{"name":"spike","status":"connected"}]` | ✅ `mcp__spike__registrar_gasto` |
-| Proceso B (`resume`) | `[]` | ❌ lista vacía |
+| Process A (new session) | `[{"name":"spike","status":"connected"}]` | ✅ `mcp__spike__registrar_gasto` |
+| Process B (`resume`) | `[]` | ❌ empty list |
 
-La explicación está en los propios tipos del SDK:
+The explanation is in the SDK's own types:
 
 ```ts
 /**
@@ -60,79 +59,74 @@ export declare type McpSdkServerConfigWithInstance = McpSdkServerConfig & {
 };
 ```
 
-Un servidor in-process es **un objeto vivo**. La sesión reanudada se reconstruye
-desde disco y ahí no cabe un objeto vivo. Aunque se vuelva a pasar en `options`
-—que es lo que hace el spike—, no se reconecta.
+An in-process server is **a live object**. The resumed session is rebuilt from
+disk, and a live object doesn't fit there. Even if it's passed again in
+`options` — which is what the spike does — it doesn't reconnect.
 
-### Lo peor no es que falle: es CÓMO falla
+### The worst part isn't that it fails: it's HOW it fails
 
-La documentación promete que si la herramienta diferida ya no está disponible,
-el proceso sale con `stop_reason: "tool_deferred_unavailable"` e `is_error: true`.
+The docs promise that if the deferred tool is no longer available, the process
+exits with `stop_reason: "tool_deferred_unavailable"` and `is_error: true`.
 
-**No es lo que pasa.** Lo que llega es:
+**That's not what happens.** What arrives is:
 
 ```
 terminal_reason: completed
-assistant: "Parece que no tengo acceso a esa herramienta específica..."
+assistant: "It seems I don't have access to that specific tool..."
 ```
 
-Un turno **exitoso**, sin error, en el que el agente se disculpa. Para APM eso
-significa que una aprobación pulsada desde el móvil podría marcarse como
-completada sin que la acción ocurra jamás. Es exactamente la clase de fallo que
-este producto no se puede permitir: el usuario cree que aprobó un envío y el
-envío no salió.
+A **successful** turn, with no error, where the agent apologizes. For APM that
+means an approval tapped on a phone could be marked as completed without the
+action ever happening. It's exactly the kind of failure this product can't
+afford: the user believes they approved a send and the send never went out.
 
 ---
 
-## Qué cambia en la arquitectura
+## What changes in the architecture
 
-1. **Las herramientas que pasan por aprobación no van in-process.** O son
-   integradas, o van en un servidor MCP que se reconstruya desde configuración
-   serializable (stdio o HTTP). Queda por medir cuál de los dos en la VPS —
-   stdio cuesta un subproceso, HTTP exige TLS con CA según la doc del SDK.
+1. **Tools that go through approval are not in-process.** Either they're
+   built-in, or they live in an MCP server rebuilt from serializable config
+   (stdio or HTTP). Which one to use on the VPS is still to be measured — stdio
+   costs a subprocess, HTTP requires TLS with a CA according to the SDK docs.
 
-2. **⚠️ Corrección al informe E.** Recomendaba el conector de correo como
-   `createSdkMcpServer` in-process, y el argumento de seguridad sigue siendo
-   bueno (los secretos no salen del proceso). Pero **enviar un correo es
-   justamente lo que exige aprobación humana**, así que ese conector no puede
-   ser in-process para la parte de envío. La lectura sí puede seguir siéndolo:
-   nadie aprueba un `list_recent`.
+2. **⚠️ Correction to report E.** It recommended the email connector as an
+   in-process `createSdkMcpServer`, and the security argument is still good
+   (secrets never leave the process). But **sending an email is exactly what
+   requires human approval**, so that connector can't be in-process for the
+   sending part. Reading can stay in-process: nobody approves a `list_recent`.
 
-3. **Nunca dar por buena una aprobación por `terminal_reason`.** APM debe
-   verificar el **efecto**, no el estado del turno. Si la fila de `approval`
-   dice `allow` pero la herramienta no dejó rastro, la ejecución es `failed`,
-   no `done`.
+3. **Never accept an approval based on `terminal_reason`.** APM must verify the
+   **effect**, not the turn's status. If the `approval` row says `allow` but the
+   tool left no trace, the run is `failed`, not `done`.
 
 ---
 
-## Lo que este spike NO probó
+## What this spike did NOT test
 
-Honestidad sobre el borde: se probó **reinicio de proceso**, no **recreación de
-contenedor**. La sesión vive en disco bajo `~/.claude/projects/…`, que en un
-contenedor recreado desaparece.
+Being honest about the edge: it tested a **process restart**, not a **container
+recreation**. The session lives on disk under `~/.claude/projects/…`, which
+disappears in a recreated container.
 
-Para el caso real de APM falta cablear un `sessionStore` (el SDK expone la
-opción, más `InMemorySessionStore` de referencia e `importSessionToStore`) sobre
-Postgres, o montar un volumen. **Es un problema más pequeño y ya acotado**: el
-mecanismo funciona, solo falta dónde guardar el transcript.
-
-Siguiente prueba, cuando toque: repetir la prueba 5 con `sessionStore` en
-Postgres y los dos procesos en contenedores distintos.
+For APM's real case, a `sessionStore` (the SDK exposes the option, plus a
+reference `InMemorySessionStore` and `importSessionToStore`) on Postgres still
+had to be wired, or a volume mounted. **It's a smaller, already-scoped problem**:
+the mechanism works, it just needs somewhere to keep the transcript.
+(Done in SPIKE 02.)
 
 ---
 
-## Cómo reproducirlo
+## How to reproduce it
 
 ```bash
 cd /opt/centro-de-mando/spike/defer-survives
 set -a && . /opt/centro-de-mando/.env && set +a
 
-node c-builtin.mjs a     # difiere; el archivo NO existe
-node c-builtin.mjs b      # proceso nuevo: reanuda, aprueba, el archivo aparece
+node c-builtin.mjs a     # defers; the file does NOT exist
+node c-builtin.mjs b     # new process: resumes, approves, the file appears
 
-node a-difiere.mjs        # el caso MCP in-process
-node b2-aprueba-vacio.mjs # …que no se ejecuta, y dice por qué
+node a-difiere.mjs        # the in-process MCP case
+node b2-aprueba-vacio.mjs # …which does not run, and says why
 ```
 
-Usa `claude-haiku-4-5` a propósito: el spike prueba fontanería, no inteligencia,
-y lo paga el dueño.
+It uses `claude-haiku-4-5` on purpose: the spike tests plumbing, not
+intelligence.

@@ -1,21 +1,21 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-/* El build sale a dist/ y de ahí lo copia el Dockerfile a nginx. En
-   producción NO corre Node: por eso React no cuesta RAM en esta VPS, que es
-   la condición con la que se aprobó el stack (docs/RESEARCH.md §2).
+/* The build goes to dist/ and the Dockerfile copies it into nginx from there.
+   Node does NOT run in production: that's why React costs no RAM on this VPS,
+   which was the condition the stack was approved under (docs/RESEARCH.md §2).
 
-   El hash de build resuelve el cache busting solo — en tu web principal hay que
-   correr tools/cachebust.js a mano, y aquí no hace falta. */
+   The build hash handles cache busting on its own — your main website needs
+   tools/cachebust.js run by hand; here it's not needed. */
 export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'dist',
-    /* Sin sourcemaps en producción: son el código fuente servido en claro. */
+    /* No sourcemaps in production: they are the source code served in the clear. */
     sourcemap: false
   },
   server: {
-    /* Para desarrollo local contra la API del contenedor. */
+    /* For local development against the container's API. */
     proxy: { '/api': 'http://127.0.0.1:3000' }
   }
 });

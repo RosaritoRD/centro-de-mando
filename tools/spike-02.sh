@@ -1,10 +1,10 @@
 #!/bin/sh
-# SPIKE 02 — aprobación diferida a través de la recreación del contenedor.
+# SPIKE 02 — a deferred approval across container recreation.
 #
-# Lanza las dos fases en contenedores efímeros DISTINTOS. Cada `docker run
-# --rm` crea uno nuevo y lo destruye al salir, así que el ~/.claude del
-# contenedor 1 no existe para el contenedor 2. Esa es toda la prueba: si la
-# reanudación funciona, viene de Postgres.
+# Runs the two phases in DIFFERENT throwaway containers. Each `docker run --rm`
+# creates a new one and destroys it on exit, so container 1's ~/.claude doesn't
+# exist for container 2. That's the whole test: if resuming works, it came
+# from Postgres.
 #
 #   ./tools/spike-02.sh
 set -eu
@@ -15,12 +15,12 @@ NET=n8n_n8n_internal
 
 cd "$REPO"
 
-# Solo las dos variables que hacen falta. NO se usa --env-file: el .env lleva
-# FIREBASE_PRIVATE_KEY multilínea y el parser de docker no lo soporta.
+# Only the two variables needed. --env-file is NOT used: the .env holds a
+# multi-line FIREBASE_PRIVATE_KEY and docker's parser doesn't support it.
 APM_DB_URL=$(sed -n 's/^APM_DB_URL=//p' .env)
 ANTHROPIC_API_KEY=$(sed -n 's/^ANTHROPIC_API_KEY=//p' .env)
-[ -n "$APM_DB_URL" ] || { echo "falta APM_DB_URL en .env"; exit 1; }
-[ -n "$ANTHROPIC_API_KEY" ] || { echo "falta ANTHROPIC_API_KEY en .env"; exit 1; }
+[ -n "$APM_DB_URL" ] || { echo "APM_DB_URL missing from .env"; exit 1; }
+[ -n "$ANTHROPIC_API_KEY" ] || { echo "ANTHROPIC_API_KEY missing from .env"; exit 1; }
 
 fase() {
   docker run --rm \
@@ -32,13 +32,13 @@ fase() {
     "$IMG" node run.mjs "$@"
 }
 
-echo "=== Contenedor 1 (fase A) ==="
+echo "=== Container 1 (phase A) ==="
 SALIDA_A=$(fase a | tee /dev/stderr)
 SESSION_ID=$(printf '%s\n' "$SALIDA_A" | sed -n 's/^SESSION_ID=//p')
-[ -n "$SESSION_ID" ] || { echo "la fase A no devolvió session_id"; exit 1; }
+[ -n "$SESSION_ID" ] || { echo "phase A returned no session_id"; exit 1; }
 
-# El session_id viaja por argv, igual que en APM viajará en la fila de
-# `approval`. Lo que este spike prueba es el TRANSCRIPT, no el id.
+# The session_id travels via argv, just as in APM it travels on the `approval`
+# row. What this spike tests is the TRANSCRIPT, not the id.
 echo
-echo "=== Contenedor 2 (fase B) — otro contenedor, disco limpio ==="
+echo "=== Container 2 (phase B) — another container, clean disk ==="
 fase b "$SESSION_ID"

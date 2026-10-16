@@ -1,17 +1,17 @@
-/* Prueba de humo de la ubicación y de continuar un chat, DENTRO de apm-api.
+/* Smoke test for the location and for continuing a chat, INSIDE apm-api.
 
-   No pasa por HTTP: las rutas exigen cookie de Firebase y lo que hay que
-   verificar aquí es el runtime.
+   It skips HTTP: the routes require a Firebase cookie, and what must be
+   verified here is the runtime.
 
-   El veredicto NO es "la columna se guardó" —eso lo garantiza el INSERT— sino
-   lo único que importa: que el agente SEPA dónde tiene que buscar. Por eso se
-   le pregunta a él y se mira su respuesta. Y luego se le manda un segundo
-   mensaje a la misma conversación para comprobar que la reanuda con contexto
-   en vez de empezar otra a escondidas.
+   The verdict is NOT "the column was saved" — the INSERT guarantees that — but
+   the only thing that matters: that the agent KNOWS where to search. So we ask
+   it and look at its answer. Then a second message goes to the same
+   conversation to check that it resumes with context instead of quietly
+   starting another one.
 
-   Cuesta ~$0.03 con haiku.
+   Costs ~$0.03 with haiku.
 
-   Correr:  docker cp tools/smoke-ubicacion.mjs apm-api:/tmp/ &&
+   Run:  docker cp tools/smoke-ubicacion.mjs apm-api:/tmp/ &&
             docker exec apm-api node /tmp/smoke-ubicacion.mjs  */
 
 import { db } from '/app/db.js';
@@ -41,43 +41,43 @@ const comprobar = (ok, que) => {
   if (!ok) fallos++;
 };
 
-console.log('1. Ejecución nueva con ubicación de destino (Newark, US)');
+console.log('1. New run with a target location (Newark, US)');
 const run = await crearRun({
-  prompt: '¿En qué ciudad tengo que buscar clientes potenciales? Responde solo el nombre.',
+  prompt: 'Which city should I search for prospects in? Reply with the name only.',
   location: { target: { city: 'Newark', country: 'US' } },
-  title: 'smoke ubicación'
+  title: 'smoke location'
 });
 
 const { rows: cols } = await db.query(
   'SELECT base_city, base_country, target_city, target_country FROM run WHERE id = $1', [run.id]);
 comprobar(cols[0].target_city === 'Newark' && cols[0].target_country === 'US',
-  `la ubicación queda en la fila: ${JSON.stringify(cols[0])}`);
+  `the location is stored on the row: ${JSON.stringify(cols[0])}`);
 
 const fin1 = await esperarFin(run.id);
-comprobar(fin1.status === 'done', `termina bien (${fin1.status}${fin1.error ? ': ' + fin1.error : ''})`);
+comprobar(fin1.status === 'done', `finishes fine (${fin1.status}${fin1.error ? ': ' + fin1.error : ''})`);
 const r1 = await ultimaRespuesta(run.id);
-console.log(`     respuesta: ${r1.slice(0, 120).replace(/\n/g, ' ')}`);
-comprobar(/newark/i.test(r1), 'el agente sabe que tiene que buscar en Newark');
+console.log(`     answer: ${r1.slice(0, 120).replace(/\n/g, ' ')}`);
+comprobar(/newark/i.test(r1), 'the agent knows it has to search in Newark');
 
-console.log('2. Segundo mensaje en la MISMA conversación');
-const seguido = await continuarRun(run.id, '¿Y en qué país está esa ciudad? Responde solo el país.');
-comprobar(Boolean(seguido) && seguido.id === run.id, 'sigue en la misma ejecución, no crea otra');
+console.log('2. Second message in the SAME conversation');
+const seguido = await continuarRun(run.id, 'And which country is that city in? Reply with the country only.');
+comprobar(Boolean(seguido) && seguido.id === run.id, 'stays in the same run, does not create another');
 
 const fin2 = await esperarFin(run.id);
-comprobar(fin2.status === 'done', `la reanudación termina bien (${fin2.status})`);
+comprobar(fin2.status === 'done', `the resume finishes fine (${fin2.status})`);
 const r2 = await ultimaRespuesta(run.id);
-console.log(`     respuesta: ${r2.slice(0, 120).replace(/\n/g, ' ')}`);
-/* La prueba de que reanudó CON contexto: nadie le ha dicho "esa ciudad" en
-   este segundo mensaje. Si hubiera empezado de cero, no sabría cuál es. */
-comprobar(/estados unidos|ee\.? ?uu|\bUSA\b|\bUS\b/i.test(r2), 'conserva el contexto del primer mensaje');
+console.log(`     answer: ${r2.slice(0, 120).replace(/\n/g, ' ')}`);
+/* The proof it resumed WITH context: nobody named "that city" in this second
+   message. Had it started from scratch, it wouldn't know which one. */
+comprobar(/united states|estados unidos|\bUSA\b|\bUS\b/i.test(r2), 'keeps the context of the first message');
 
 const { rows: ev } = await db.query(
   "SELECT count(*) FROM run_event WHERE run_id = $1 AND kind = 'user'", [run.id]);
-comprobar(Number(ev[0].count) === 2, `los dos mensajes están en el hilo (${ev[0].count})`);
+comprobar(Number(ev[0].count) === 2, `both messages are in the thread (${ev[0].count})`);
 
 const { rows: fila } = await db.query('SELECT status, ended_at FROM run WHERE id = $1', [run.id]);
-comprobar(Boolean(fila[0].ended_at), 'ended_at vuelve a estar puesto tras la segunda vuelta');
+comprobar(Boolean(fila[0].ended_at), 'ended_at is set again after the second turn');
 
-console.log(fallos === 0 ? '\nTODO BIEN' : `\n${fallos} FALLOS`);
+console.log(fallos === 0 ? '\nALL GOOD' : `\n${fallos} FAILURES`);
 await db.end();
 process.exit(fallos === 0 ? 0 : 1);

@@ -1,18 +1,18 @@
-/* Adaptador SessionStore sobre Postgres.
+/* SessionStore adapter on Postgres.
 
-   El SDK define SessionStore como cuatro métodos, dos obligatorios
-   (`append`/`load`) y el resto opcionales. Esto implementa los dos
-   obligatorios más `listSubkeys` (sin él, al reanudar solo se materializa el
-   transcript principal y se pierden los de los subagentes).
+   The SDK defines SessionStore as four methods, two required (`append`/`load`)
+   and the rest optional. This implements the two required ones plus
+   `listSubkeys` (without it, resuming only materializes the main transcript and
+   the subagents' are lost).
 
-   `delete` se omite a propósito: es opcional, su ausencia es un no-op válido
-   para backends append-only, y a apm_app no se le concede DELETE. */
+   `delete` is left out on purpose: it's optional, its absence is a valid no-op
+   for append-only backends, and apm_app isn't granted DELETE. */
 
 import pg from 'pg';
 
-/* El transcript principal llega como `subpath: undefined`; la cadena vacía es
-   inválida según el contrato. En la tabla se normaliza a '' porque la clave
-   única no puede deduplicar sobre NULL. */
+/* The main transcript arrives as `subpath: undefined`; the empty string is
+   invalid under the contract. In the table it's normalized to '' because the
+   unique key can't dedupe on NULL. */
 const MAIN = '';
 
 export function createPgSessionStore(connectionString) {
@@ -25,9 +25,9 @@ export function createPgSessionStore(connectionString) {
       if (!entries.length) return;
       const client = await pool.connect();
       try {
-        /* Una transacción por lote. El contrato exige preservar el orden de
-           llamada dentro de un proceso; insertar en un solo statement con
-           UNNEST mantiene el orden del array y da un único round-trip. */
+        /* One transaction per batch. The contract requires preserving call
+           order within a process; inserting in a single UNNEST statement keeps
+           the array order and makes it one round-trip. */
         await client.query('BEGIN');
         await client.query(
           `INSERT INTO session_entry (project_key, session_id, subpath, entry_uuid, entry)
@@ -47,9 +47,9 @@ export function createPgSessionStore(connectionString) {
         await client.query('COMMIT');
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {});
-        /* Se relanza a propósito. El SDK reintenta 3 veces y, si sigue
-           fallando, emite un `mirror_error`. Tragarse el error aquí
-           convertiría una pérdida de datos en silencio. */
+        /* Rethrown on purpose. The SDK retries 3 times and, if it keeps
+           failing, emits a `mirror_error`. Swallowing the error here would
+           turn data loss into silence. */
         throw err;
       } finally {
         client.release();
@@ -63,10 +63,11 @@ export function createPgSessionStore(connectionString) {
           ORDER BY id`,
         [key.projectKey, key.sessionId, key.subpath ?? MAIN]
       );
-      /* null = nunca escrita. El contrato permite no distinguirla de "vacía",
-         y aquí no hace falta: una sesión sin filas es una sesión que no
-         existe. Postgres devuelve JSONB ya parseado y puede reordenar las
-         claves del objeto — el SDK no compara bytes, solo exige deep-equal. */
+      /* null = never written. The contract allows not distinguishing it from
+         "empty", and here there's no need: a session with no rows is a session
+         that doesn't exist. Postgres returns JSONB already parsed and may
+         reorder the object's keys — the SDK doesn't compare bytes, it only
+         requires deep-equal. */
       return rows.length ? rows.map((r) => r.entry) : null;
     },
 

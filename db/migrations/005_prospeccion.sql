@@ -1,24 +1,24 @@
--- tu empresa — APM
--- Migración 005: prospección por llamadas (Fase 3).
+-- Acme — APM
+-- Migration 005: call prospecting (Phase 3).
 --
--- Se aplica con:
+-- Apply with:
 --   docker exec -i n8n_postgres psql -U n8n -d apm --single-transaction < db/migrations/005_prospeccion.sql
 --
--- POR QUÉ
--- Desde el 17/09/2026 hay una fuente gratis y legal de 13.385 contratistas de NYC
--- con teléfono y se habían hecho 0 llamadas: no había dónde ver a quién llamar,
--- qué decir y qué pasó. Spec: .planning/specs/apm-prospeccion-llamadas.md
+-- WHY
+-- Since 17/09/2026 there's a free, legal source of 13,385 NYC contractors
+-- with phone numbers, and 0 calls had been made: there was nowhere to see who to call,
+-- what to say and what happened. Spec: .planning/specs/apm-prospeccion-llamadas.md
 --
--- tenant_id NO es multi-tenant todavía: es el hueco para venderlo luego a clientes
--- sin migrar datos. Hoy todo es 'principal'.
+-- tenant_id is NOT multi-tenant yet: it's the slot for selling it to customers later
+-- without migrating data. Today everything is 'main'.
 
 -- ── Leads ──────────────────────────────────────────────────────────
--- Un negocio = un teléfono por tenant. Si llega de dos fuentes se une y se
--- guardan ambas en `sources`. internal_only marca lo que vino de un scraper: la
--- versión para clientes lo excluye por construcción, nunca por disciplina.
+-- One business = one phone per tenant. If it arrives from two sources it's merged
+-- and both are stored in `sources`. internal_only marks what came from a scraper: the
+-- customer version excludes it by construction, never by discipline.
 CREATE TABLE IF NOT EXISTS lead (
   id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  tenant_id      TEXT NOT NULL DEFAULT 'principal',
+  tenant_id      TEXT NOT NULL DEFAULT 'main',
   business_name  TEXT NOT NULL,
   phone_e164     TEXT NOT NULL,
   website        TEXT,
@@ -33,23 +33,23 @@ CREATE TABLE IF NOT EXISTS lead (
   status         TEXT NOT NULL DEFAULT 'nuevo'
                  CHECK (status IN ('nuevo','llamado','interesado','demo','cliente','descartado')),
   next_call_at   TIMESTAMPTZ,
-  reserved_until TIMESTAMPTZ,              -- evita llamar dos veces desde dos pestañas
+  reserved_until TIMESTAMPTZ,              -- avoids calling twice from two tabs
   timezone       TEXT NOT NULL DEFAULT 'America/New_York',
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at     TIMESTAMPTZ
 );
 CREATE UNIQUE INDEX IF NOT EXISTS lead_phone_idx ON lead (tenant_id, phone_e164) WHERE deleted_at IS NULL;
--- La consulta caliente: "¿a quién llamo ahora en este nicho?"
+-- The hot query: "who do I call now in this niche?"
 CREATE INDEX IF NOT EXISTS lead_queue_idx ON lead (tenant_id, niche, next_call_at)
   WHERE deleted_at IS NULL AND status NOT IN ('cliente','descartado');
 
--- ── Llamadas — APPEND ONLY ─────────────────────────────────────────
--- Nunca UPDATE: un resultado marcado por error se corrige con otra fila que
--- apunta a la mala (corrects_id). El historial completo ES el dato.
+-- ── Calls — APPEND ONLY ────────────────────────────────────────────
+-- Never UPDATE: an outcome marked by mistake is corrected with another row
+-- pointing at the wrong one (corrects_id). The full history IS the data.
 CREATE TABLE IF NOT EXISTS call_log (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  tenant_id    TEXT NOT NULL DEFAULT 'principal',
+  tenant_id    TEXT NOT NULL DEFAULT 'main',
   lead_id      UUID NOT NULL,
   outcome      TEXT NOT NULL
                CHECK (outcome IN ('no_contesto','buzon','no_interesa','interesado',
@@ -63,20 +63,20 @@ CREATE TABLE IF NOT EXISTS call_log (
 CREATE INDEX IF NOT EXISTS call_log_lead_idx ON call_log (lead_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS call_log_week_idx ON call_log (tenant_id, created_at);
 
--- ── Supresión ("no me llames más") ─────────────────────────────────
--- Por teléfono y no por lead: sobrevive a que el negocio se reimporte.
+-- ── Suppression ("don't call me again") ────────────────────────────
+-- By phone, not by lead: it survives the business being re-imported.
 CREATE TABLE IF NOT EXISTS suppression (
-  tenant_id  TEXT NOT NULL DEFAULT 'principal',
+  tenant_id  TEXT NOT NULL DEFAULT 'main',
   phone_e164 TEXT NOT NULL,
   reason     TEXT NOT NULL CHECK (reason IN ('no_llamar','numero_malo')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, phone_e164)
 );
 
--- ── Ejecuciones de importación ─────────────────────────────────────
+-- ── Import runs ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS lead_source_run (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  tenant_id   TEXT NOT NULL DEFAULT 'principal',
+  tenant_id   TEXT NOT NULL DEFAULT 'main',
   source      TEXT NOT NULL,
   niche       TEXT NOT NULL,
   params      JSONB NOT NULL DEFAULT '{}',
@@ -92,10 +92,10 @@ CREATE TABLE IF NOT EXISTS lead_source_run (
 );
 CREATE INDEX IF NOT EXISTS lead_source_run_day_idx ON lead_source_run (tenant_id, source, started_at DESC);
 
--- ── Guiones por nicho ──────────────────────────────────────────────
+-- ── Scripts per niche ──────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS call_script (
   id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  tenant_id  TEXT NOT NULL DEFAULT 'principal',
+  tenant_id  TEXT NOT NULL DEFAULT 'main',
   niche      TEXT NOT NULL,
   title      TEXT NOT NULL,
   body       TEXT NOT NULL,
@@ -104,11 +104,11 @@ CREATE TABLE IF NOT EXISTS call_script (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS call_script_niche_idx ON call_script (tenant_id, niche) WHERE deleted_at IS NULL;
 
--- ── Permisos ───────────────────────────────────────────────────────
--- Igual que el resto: sin DELETE. Se archiva o se corrige, no se borra.
+-- ── Permissions ────────────────────────────────────────────────────
+-- Same as the rest: no DELETE. Archive or correct, never delete.
 GRANT SELECT, INSERT, UPDATE ON lead, suppression, lead_source_run, call_script TO apm_app;
--- call_log es append-only también a nivel de permisos: ni UPDATE.
+-- call_log is append-only at the permission level too: not even UPDATE.
 GRANT SELECT, INSERT ON call_log TO apm_app;
--- Excepciones deliberadas a "id + timestamps + deleted_at en cada tabla":
--- call_log (append-only, se corrige con corrects_id) y suppression (permanente,
--- clave = teléfono). Ninguna se borra ni se archiva nunca.
+-- Deliberate exceptions to "id + timestamps + deleted_at on every table":
+-- call_log (append-only, corrected via corrects_id) and suppression (permanent,
+-- key = phone). Neither is ever deleted or archived.

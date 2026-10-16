@@ -1,23 +1,23 @@
-/* tu empresa — APM · runtime de agentes (Fase 2).
+/* Acme — APM · agent runtime (Phase 2).
 
-   Aquí vive el flujo que define el producto (docs/ARCHITECTURE.md §2):
-   una ejecución que puede PARARSE a pedir permiso, sobrevivir horas y un
-   redespliegue, y continuar cuando el dueño aprueba desde el móvil.
+   This is the flow that defines the product (docs/ARCHITECTURE.md §2):
+   a run that can STOP to ask for permission, survive hours and a redeploy,
+   and continue when the owner approves from his phone.
 
-   Los tres invariantes que no se negocian:
+   The three non-negotiable invariants:
 
-   1. El estado de verdad es `run_event`, append-only. Reconstruir = releer
-      eventos. Si el proceso muere a mitad, la reanudación sigue funcionando.
-   2. La aprobación se verifica en el SERVIDOR, contra la fila de `approval`.
-      Nunca se confía en que el prompt "recuerde" pedir permiso.
-   3. Los topes (coste, iteraciones, presupuesto del día) los aplica este
-      código, no el modelo.
+   1. The source of truth is `run_event`, append-only. Rebuild = replay the
+      events. If the process dies halfway, resuming still works.
+   2. Approval is checked on the SERVER, against the `approval` row. We never
+      trust the prompt to "remember" to ask for permission.
+   3. The caps (cost, iterations, daily budget) are enforced by this code,
+      not by the model.
 
-   ⚠️ CORRECCIÓN A ARCHITECTURE.md §2: el diagrama dibuja
-   `canUseTool → {behavior:"defer"}`. Eso NO existe. En los tipos del SDK,
-   `PermissionResult` solo admite 'allow' y 'deny'; el 'defer' vive
-   exclusivamente en los hooks (`HookPermissionDecision`). Por eso la puerta
-   de aprobación es un hook PreToolUse y no canUseTool. */
+   ⚠️ CORRECTION TO ARCHITECTURE.md §2: the diagram draws
+   `canUseTool → {behavior:"defer"}`. That does NOT exist. In the SDK types,
+   `PermissionResult` only allows 'allow' and 'deny'; 'defer' lives only in
+   hooks (`HookPermissionDecision`). That's why the approval gate is a
+   PreToolUse hook and not canUseTool. */
 
 import { EventEmitter } from 'node:events';
 import { query } from '@anthropic-ai/claude-agent-sdk';
@@ -28,86 +28,86 @@ import { crearRepoLeads } from './leads-repo.js';
 import { servidorDeLeads, NOMBRE_HERRAMIENTA as GUARDAR_LEADS } from './lead-tool.js';
 import { presupuestoDeRun, topeDeVuelta } from './topes.js';
 
-/* El repo de leads, para la herramienta `guardar_leads` (lead-tool.js). */
+/* The leads repository, for the `guardar_leads` tool (lead-tool.js). */
 const repoLeads = crearRepoLeads({ db });
 
-/* ⚠️ CONSTANTE DEL DESPLIEGUE, no una preferencia. El SDK deriva el
-   `projectKey` del cwd y no deja fijarlo; cambiar esto invalida todas las
-   aprobaciones pendientes (medido en docs/SPIKE-02-container.md). Si algún
-   día hay que cambiarlo, hay que vaciar antes la cola de aprobaciones. */
+/* ⚠️ A DEPLOYMENT CONSTANT, not a preference. The SDK derives the
+   `projectKey` from the cwd and won't let you set it; changing this
+   invalidates every pending approval (measured in docs/SPIKE-02-container.md).
+   If it ever has to change, drain the approval queue first. */
 export const AGENT_CWD = '/workspace';
 
-/* Bus en memoria para el SSE. No es el estado: es solo el empujón para que un
-   navegador conectado vea el evento sin hacer polling. Quien llega tarde
-   relee `run_event`, que sí es el estado. */
+/* In-memory bus for SSE. It is not the state: just the nudge so a connected
+   browser sees the event without polling. Whoever arrives late re-reads
+   `run_event`, which IS the state. */
 export const bus = new EventEmitter();
 bus.setMaxListeners(50);
 
-/* Herramientas que NO se ejecutan sin permiso humano. El criterio es
-   irreversibilidad: escribir en disco, ejecutar comandos o salir a la red
-   con efectos. Leer no pide permiso — nadie aprueba un `grep`. */
+/* Tools that do NOT run without human permission. The criterion is
+   irreversibility: writing to disk, running commands or reaching the network
+   with side effects. Reading needs no permission — nobody approves a `grep`. */
 const CON_APROBACION = ['Bash', 'Write', 'Edit', 'NotebookEdit'];
 
-/* Lo que el agente puede usar sin preguntar. Lista blanca explícita, nunca
-   comodín: es la regla del informe A. */
-/* ⚠️ 'Task' es la herramienta de delegación y es OBLIGATORIA para que el
-   orquestador pueda usar subagentes. Comprobado quitándola: sin ella el
-   agente no delega, se va a `Bash` y acaba pidiendo una aprobación que nadie
-   quería. Ojo con el nombre: se DECLARA como 'Task' pero en los eventos
-   aparece como 'Agent', así que buscar 'Agent' en esta lista no encuentra
-   nada y parece que sobra. No sobra. */
+/* What the agent can use without asking. An explicit allowlist, never a
+   wildcard: that's the rule from report A. */
+/* ⚠️ 'Task' is the delegation tool and it is REQUIRED for the orchestrator
+   to use subagents. Verified by removing it: without it the agent doesn't
+   delegate, falls back to `Bash` and ends up requesting an approval nobody
+   wanted. Watch the name: it's DECLARED as 'Task' but shows up in events as
+   'Agent', so searching this list for 'Agent' finds nothing and it looks
+   unnecessary. It isn't. */
 const HERRAMIENTAS = ['Read', 'Glob', 'Grep', 'WebSearch', 'Task', ...CON_APROBACION];
 
-/* Modelo por defecto: Haiku, no Sonnet. Medido: un "Hola" cuesta $0.037 con
-   Sonnet 5 y ~$0.012 con Haiku, y casi todo el gasto es el prefijo cacheado,
-   no la respuesta. Para lo que se pide 20 veces al día, Sonnet es pagar de
-   más. El chat deja subir de modelo cuando el trabajo lo pide. */
+/* Default model: Haiku, not Sonnet. Measured: a "Hello" costs $0.037 with
+   Sonnet 5 and ~$0.012 with Haiku, and almost all of it is the cached prefix,
+   not the answer. For something asked 20 times a day, Sonnet is overpaying.
+   The chat lets you move up a model when the work calls for it. */
 export const MODELO_DEFECTO = 'claude-haiku-4-5';
 
-/* ── Subagentes ──────────────────────────────────────────────────
-   El orquestador delega con la herramienta `Task`.
+/* ── Subagents ───────────────────────────────────────────────────
+   The orchestrator delegates with the `Task` tool.
 
-   ⚠️ Un subagente MULTIPLICA el coste: rehace contexto, explora por su
-   cuenta y luego el orquestador relee su informe. Por eso hay uno solo y es
-   de SOLO LECTURA — sin Bash, Write ni Edit. Un subagente que solo investiga
-   no puede pedir aprobaciones, y eso evita el peor caso: una cola de
-   permisos generada por un agente que el dueño nunca lanzó a mano.
+   ⚠️ A subagent MULTIPLIES the cost: it rebuilds context, explores on its
+   own and then the orchestrator re-reads its report. That's why there is only
+   one and it is READ-ONLY — no Bash, Write or Edit. A subagent that only
+   researches can't request approvals, which avoids the worst case: a queue of
+   permissions generated by an agent the owner never launched by hand.
 
-   Corre en Haiku a propósito: la parte cara del multi-agente es el número de
-   agentes, no la calidad de cada uno. */
+   It runs on Haiku on purpose: the expensive part of multi-agent is the
+   number of agents, not the quality of each one. */
 const SUBAGENTES = {
   investigador: {
-    description: 'Busca y resume información. Úsalo para preguntas que exigen '
-      + 'buscar en la web o leer varios archivos, cuando el resultado quepa en un resumen.',
-    prompt: 'Investigas para el centro de mando de tu empresa. Busca, contrasta y '
-      + 'devuelve un resumen breve en español con las fuentes. No inventes datos: '
-      + 'si no lo encuentras, dilo. No puedes escribir ni ejecutar nada.',
+    description: 'Finds and summarizes information. Use it for questions that require '
+      + 'searching the web or reading several files, when the result fits in a summary.',
+    prompt: 'You research for the Acme command center. Search, cross-check and '
+      + "return a short summary, with sources, in the user's language (usually Spanish). "
+      + "Don't make up data: if you can't find it, say so. You can't write or run anything.",
     tools: ['Read', 'Glob', 'Grep', 'WebSearch'],
     model: 'claude-haiku-4-5'
   }
 };
 
-/* System prompt propio en vez del preset `claude_code`. El motivo NO es el
-   coste (medido: apenas unos cientos de tokens): es que el preset describe a
-   un asistente de programación, y APM es un centro de mando de negocio. */
+/* Our own system prompt instead of the `claude_code` preset. The reason is NOT
+   cost (measured: just a few hundred tokens): the preset describes a coding
+   assistant, and APM is a business command center. */
 const SISTEMA_BASE = [
-  'Eres el orquestador de APM, el centro de mando de tu empresa.',
-  'Trabajas para el dueño, una sola persona. No eres un asistente de programación.',
-  'Responde en español, directo y sin preámbulos.',
-  'Todo lo que escriba en disco o ejecute comandos se para a pedir permiso:',
-  'no prometas que algo está hecho hasta que la herramienta haya devuelto resultado.',
-  'Si no puedes completar algo, dilo claramente en vez de rellenar.',
-  /* 26/09/2026: sin esta línea, las búsquedas de leads se quedaban como una
-     tabla en el chat y nunca llegaban a la pestaña Leads. */
-  'Cuando encuentres negocios con teléfono (leads), guárdalos SIEMPRE con la herramienta',
-  'guardar_leads antes de responder, en un nicho en inglés, singular y snake_case',
-  '(ej. dental_clinic), sin cadenas ni franquicias grandes, y di en tu respuesta cuántos se guardaron.'
+  'You are the orchestrator of APM, the Acme command center.',
+  'You work for the owner, a single person. You are not a coding assistant.',
+  'Reply in the language the user writes in (usually Spanish), directly and without preamble.',
+  'Anything that writes to disk or runs commands stops to ask for permission:',
+  "don't promise something is done until the tool has returned a result.",
+  "If you can't complete something, say so clearly instead of filling in.",
+  /* 26/09/2026: without this line, lead searches stayed as a table in the
+     chat and never reached the Leads tab. */
+  'When you find businesses with a phone number (leads), ALWAYS save them with the',
+  'guardar_leads tool before replying, under a niche in English, singular and snake_case',
+  '(e.g. dental_clinic), excluding chains and big franchises, and say in your reply how many were saved.'
 ];
 
-/* El system prompt se arma POR EJECUCIÓN porque lleva la ubicación con la que
-   se lanzó, que está en sus columnas. Al reanudar tras una aprobación se
-   vuelve a leer la fila, así que un chat que empezó buscando en Newark sigue
-   buscando en Newark aunque el ajuste global haya cambiado entre medias. */
+/* The system prompt is built PER RUN because it carries the location the run
+   was launched with, stored in its columns. Resuming after an approval re-reads
+   the row, so a chat that started searching in Newark keeps searching in Newark
+   even if the global setting changed in the meantime. */
 function sistema(run) {
   return [...SISTEMA_BASE, ...lineasDeUbicacion(desdeFilaRun(run))].join(' ');
 }
@@ -115,11 +115,11 @@ function sistema(run) {
 const MAX_CONCURRENTES = Number(process.env.MAX_CONCURRENT_RUNS || 2);
 const vivas = new Set();
 
-/* ── Eventos ─────────────────────────────────────────────────────── */
+/* ── Events ──────────────────────────────────────────────────────── */
 
-/* El `seq` se calcula dentro del INSERT y no en JavaScript: dos escrituras
-   concurrentes sobre la misma ejecución no pueden darse el mismo número, y
-   el índice único (run_id, seq) lo garantiza. */
+/* `seq` is computed inside the INSERT, not in JavaScript: two concurrent
+   writes on the same run can't get the same number, and the unique index
+   (run_id, seq) guarantees it. */
 async function evento(runId, kind, payload) {
   const { rows } = await db.query(
     `INSERT INTO run_event (run_id, seq, kind, payload)
@@ -132,8 +132,8 @@ async function evento(runId, kind, payload) {
   return e;
 }
 
-/* Ultimo texto que emitio el asistente en esta ejecucion, o null. Sirve para
-   no duplicar el `result` de cierre del SDK (ver `cerrar`). */
+/* The last text the assistant emitted in this run, or null. Used to avoid
+   duplicating the SDK's closing `result` (see `cerrar`). */
 async function ultimoTextoAsistente(runId) {
   const { rows } = await db.query(
     `SELECT payload->>'text' AS t FROM run_event
@@ -151,18 +151,18 @@ async function estado(runId, status, extra = {}) {
   if (extra.error) { args.push(extra.error); campos.push(`error = $${args.length}`); }
   if (extra.ended) campos.push('ended_at = now()');
   if (extra.started) campos.push('started_at = now()');
-  /* Reabrir: una ejecución terminada a la que se le manda otro mensaje deja
-     de estar terminada. Sin limpiar ended_at y error, el historial diría que
-     acabó a las 10:04 mientras sigue escribiendo a las 10:30. */
+  /* Reopen: a finished run that gets another message is no longer finished.
+     Without clearing ended_at and error, the history would say it ended at
+     10:04 while it is still writing at 10:30. */
   if (extra.reopen) campos.push('ended_at = NULL', 'error = NULL');
   await db.query(`UPDATE run SET ${campos.join(', ')} WHERE id = $1`, args);
   bus.emit(runId, { kind: 'status', payload: { status } });
 }
 
-/* ── Presupuesto ─────────────────────────────────────────────────── */
+/* ── Budget ──────────────────────────────────────────────────────── */
 
-/* El freno de mano. Se consulta ANTES de lanzar, porque con el multiplicador
-   del multi-agente un solo despiste cuesta dinero de verdad. */
+/* The handbrake. Checked BEFORE launching, because with the multi-agent
+   multiplier a single slip costs real money. */
 export async function presupuestoDelDia() {
   const limite = Number(process.env.DAILY_BUDGET_USD || 5);
   const { rows } = await db.query(
@@ -173,9 +173,9 @@ export async function presupuestoDelDia() {
   return { limitUsd: Number(r.limit_usd), spentUsd: Number(r.spent_usd) };
 }
 
-/* ⚠️ cost_usd sale de `total_cost_usd` del SDK y NUNCA de `usage`: usage
-   EXCLUYE los tokens de los subagentes (corrección del informe A). Contar por
-   usage subestimaría justo el caso caro. */
+/* ⚠️ cost_usd comes from the SDK's `total_cost_usd` and NEVER from `usage`:
+   usage EXCLUDES subagent tokens (correction to report A). Counting by usage
+   would underestimate exactly the expensive case. */
 async function anotarCoste(runId, msg) {
   const coste = Number(msg.total_cost_usd || 0);
   const u = msg.usage || {};
@@ -183,7 +183,7 @@ async function anotarCoste(runId, msg) {
     `INSERT INTO run_cost (run_id, model, input_tokens, output_tokens,
                            cache_read_input_tokens, cache_creation_input_tokens, cost_usd)
      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [runId, msg.model || 'desconocido', u.input_tokens || 0, u.output_tokens || 0,
+    [runId, msg.model || 'unknown', u.input_tokens || 0, u.output_tokens || 0,
      u.cache_read_input_tokens || 0, u.cache_creation_input_tokens || 0, coste]
   );
   await db.query(
@@ -196,11 +196,11 @@ async function anotarCoste(runId, msg) {
   return coste;
 }
 
-/* ── La puerta de aprobación ─────────────────────────────────────── */
+/* ── The approval gate ───────────────────────────────────────────── */
 
-/* Un hook PreToolUse por ejecución. Decide mirando la BD, no la memoria del
-   proceso: si el contenedor se recreó entre el defer y la aprobación, este
-   código es nuevo pero la fila de `approval` sigue ahí. */
+/* One PreToolUse hook per run. It decides by looking at the DB, not process
+   memory: if the container was recreated between the defer and the approval,
+   this code is new but the `approval` row is still there. */
 function puerta(runId) {
   return {
     PreToolUse: [{
@@ -214,17 +214,17 @@ function puerta(runId) {
 
         if (previa?.decision === 'allow') {
           return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow',
-            permissionDecisionReason: 'aprobado por el usuario' } };
+            permissionDecisionReason: 'approved by the user' } };
         }
         if (previa?.decision === 'deny') {
           return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny',
-            permissionDecisionReason: previa.deny_reason || 'denegado por el usuario' } };
+            permissionDecisionReason: previa.deny_reason || 'denied by the user' } };
         }
 
-        /* Primera vez que se ve esta llamada: se crea la solicitud y se
-           difiere. ON CONFLICT DO NOTHING porque el hook puede repetirse si el
-           SDK reintenta el turno, y dos filas para la misma llamada dejarían
-           una aprobación huérfana para siempre. */
+        /* First time this call is seen: create the request and defer.
+           ON CONFLICT DO NOTHING because the hook can repeat if the SDK
+           retries the turn, and two rows for the same call would leave an
+           orphan approval forever. */
         await db.query(
           `INSERT INTO approval (run_id, request_id, tool_name, tool_input, summary)
                 VALUES ($1, $2, $3, $4, $5)
@@ -234,34 +234,34 @@ function puerta(runId) {
         await evento(runId, 'approval_requested',
           { requestId, tool: input.tool_name, input: input.tool_input });
         return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'defer',
-          permissionDecisionReason: 'esperando aprobación humana' } };
+          permissionDecisionReason: 'waiting for human approval' } };
       }]
     }]
   };
 }
 
-/* Una frase en cristiano para la notificación del móvil. Aprobar algo que
-   solo se entiende leyendo JSON es como no aprobar nada. */
+/* A plain-language sentence for the phone notification. Approving something
+   you can only understand by reading JSON is like approving nothing. */
 function resumen(tool, input) {
   const i = input || {};
-  if (tool === 'Bash') return `Ejecutar en la terminal: ${String(i.command || '').slice(0, 200)}`;
-  if (tool === 'Write') return `Escribir el archivo ${i.file_path || '(sin ruta)'}`;
-  if (tool === 'Edit' || tool === 'NotebookEdit') return `Modificar el archivo ${i.file_path || '(sin ruta)'}`;
-  return `Usar la herramienta ${tool}`;
+  if (tool === 'Bash') return `Run in the terminal: ${String(i.command || '').slice(0, 200)}`;
+  if (tool === 'Write') return `Write the file ${i.file_path || '(no path)'}`;
+  if (tool === 'Edit' || tool === 'NotebookEdit') return `Edit the file ${i.file_path || '(no path)'}`;
+  return `Use the ${tool} tool`;
 }
 
-/* ── El bucle ────────────────────────────────────────────────────── */
+/* ── The loop ────────────────────────────────────────────────────── */
 
-/* Drena una vuelta del agente. `arranque` distingue la primera ejecución de
-   una reanudación tras aprobación: cambia el prompt y añade `resume`. */
+/* Drains one agent turn. `arranque` tells the first run apart from a resume
+   after approval: it changes the prompt and adds `resume`. */
 async function vuelta(run, arranque) {
-  /* Lo que queda del día, leído en CADA vuelta: una reanudación tras aprobar
-     no puede gastar su presupuesto entero si el día ya va casi lleno. */
+  /* What's left of the day, read on EVERY turn: a resume after approval can't
+     spend its whole budget if the day is already nearly full. */
   const tope = topeDeVuelta(run.budget_usd, await presupuestoDelDia());
-  /* Día agotado: no se lanza. Nunca se pasa 0 al SDK (lo manda tal cual como
-     --max-budget-usd 0) y la reanudación tras aprobar no pasaba por comprobarTopes. */
+  /* Day used up: don't launch. Never pass 0 to the SDK (it forwards it as-is
+     as --max-budget-usd 0), and the resume after approval skipped comprobarTopes. */
   if (tope <= 0) {
-    const e = new Error('presupuesto diario agotado');
+    const e = new Error('daily budget used up');
     e.code = 'budget_exhausted';
     throw e;
   }
@@ -270,19 +270,19 @@ async function vuelta(run, arranque) {
     cwd: AGENT_CWD,
     systemPrompt: sistema(run),
     agents: SUBAGENTES,
-    /* `tools` y `allowedTools` NO son lo mismo, y confundirlos cuesta dinero.
-       `allowedTools` solo dice qué se PERMITE usar; el SDK sigue cargando su
-       catálogo entero en el prompt. `tools` es el que decide qué definiciones
-       viajan. Medido: sin `tools`, un "Hola" cacheaba 24.937 tokens y costaba
-       $0.094 con casi todo el gasto en definiciones de herramientas que ni
-       siquiera estaban permitidas. Con ambos, el prefijo baja a ~7.400. */
+    /* `tools` and `allowedTools` are NOT the same, and mixing them up costs
+       money. `allowedTools` only says what is ALLOWED; the SDK still loads its
+       whole catalog into the prompt. `tools` decides which definitions are
+       sent. Measured: without `tools`, a "Hello" cached 24,937 tokens and cost
+       $0.094, almost all of it on definitions of tools that weren't even
+       allowed. With both, the prefix drops to ~7,400. */
     tools: HERRAMIENTAS,
-    /* La herramienta propia va por MCP en proceso: no está en `tools` (que
-       es el catálogo del SDK), pero sí tiene que estar permitida. */
+    /* Our own tool goes through in-process MCP: it isn't in `tools` (the
+       SDK's catalog), but it does have to be allowed. */
     allowedTools: [...HERRAMIENTAS, GUARDAR_LEADS],
     mcpServers: { apm: servidorDeLeads({ repo: repoLeads, runId: run.id }) },
-    /* settingSources vacío: el agente NO hereda la configuración de la
-       máquina (~/.claude). Lo que puede hacer se decide aquí y solo aquí. */
+    /* Empty settingSources: the agent does NOT inherit the machine's config
+       (~/.claude). What it can do is decided here and only here. */
     settingSources: [],
     maxTurns: run.max_iterations,
     maxBudgetUsd: tope,
@@ -314,11 +314,11 @@ async function vuelta(run, arranque) {
   return resultado;
 }
 
-/* Cierra una vuelta. Devuelve true si la ejecución quedó EN ESPERA (no
-   terminada), que es el caso interesante. */
+/* Closes a turn. Returns true if the run is left WAITING (not finished),
+   which is the interesting case. */
 async function cerrar(run, r) {
   if (!r) {
-    await estado(run.id, 'failed', { error: 'el agente no devolvió resultado', ended: true });
+    await estado(run.id, 'failed', { error: 'the agent returned no result', ended: true });
     return false;
   }
   const coste = await anotarCoste(run.id, r);
@@ -332,11 +332,11 @@ async function cerrar(run, r) {
     await estado(run.id, 'failed', { error: r.result || r.terminal_reason, ended: true });
     return false;
   }
-  /* El SDK cierra la vuelta con un `result` que casi siempre REPITE, palabra
-     por palabra, el último bloque de texto del asistente. Guardarlo dejaba una
-     fila duplicada en `run_event` y una burbuja repetida en el chat (arreglado
-     tambien en la UI, pero la raiz esta aqui). Solo se guarda `final` cuando
-     aporta algo distinto de lo ultimo que ya dijo el asistente. */
+  /* The SDK closes the turn with a `result` that almost always REPEATS, word
+     for word, the assistant's last text block. Storing it left a duplicate row
+     in `run_event` and a repeated bubble in the chat (also fixed in the UI, but
+     the root is here). `final` is only stored when it adds something different
+     from what the assistant last said. */
   const textoFinal = r.result || '';
   if (textoFinal && textoFinal !== (await ultimoTextoAsistente(run.id))) {
     await evento(run.id, 'final', { text: textoFinal });
@@ -345,18 +345,18 @@ async function cerrar(run, r) {
   return false;
 }
 
-/* ── API pública ─────────────────────────────────────────────────── */
+/* ── Public API ──────────────────────────────────────────────────── */
 
-/* Los dos frenos de mano, juntos, para que arrancar y continuar no puedan
-   divergir: una conversación reanudada gasta exactamente igual que una nueva. */
+/* Both handbrakes together, so starting and continuing can't diverge: a
+   resumed conversation spends exactly like a new one. */
 function comprobarTopes({ limitUsd, spentUsd }) {
   if (spentUsd >= limitUsd) {
-    const e = new Error('presupuesto diario agotado');
+    const e = new Error('daily budget used up');
     e.code = 'budget_exhausted';
     throw e;
   }
   if (vivas.size >= MAX_CONCURRENTES) {
-    const e = new Error(`ya hay ${vivas.size} ejecuciones en marcha (tope ${MAX_CONCURRENTES})`);
+    const e = new Error(`${vivas.size} runs already in progress (limit ${MAX_CONCURRENTES})`);
     e.code = 'too_many_runs';
     throw e;
   }
@@ -365,8 +365,8 @@ function comprobarTopes({ limitUsd, spentUsd }) {
 export async function crearRun({ prompt, area, model, budgetUsd, title, location }) {
   comprobarTopes(await presupuestoDelDia());
 
-  /* La ubicación se resuelve AQUÍ y se congela en la fila: lo que mandó el
-     chat, y lo que no venga, el ajuste guardado. */
+  /* The location is resolved HERE and frozen in the row: whatever the chat
+     sent, and for anything missing, the saved setting. */
   const ubic = ubicacionEfectiva(location, await ubicacionGuardada());
 
   const { rows } = await db.query(
@@ -383,8 +383,8 @@ export async function crearRun({ prompt, area, model, budgetUsd, title, location
   return run;
 }
 
-/* No se hace await a propósito: el HTTP contesta con el id y el navegador se
-   engancha al SSE. Una ejecución puede durar minutos. */
+/* Not awaited on purpose: HTTP answers with the id and the browser hooks into
+   SSE. A run can last minutes. */
 function lanzar(run, arranque) {
   vivas.add(run.id);
   (async () => {
@@ -401,33 +401,32 @@ function lanzar(run, arranque) {
   })();
 }
 
-/* El ajuste global, leído de `setting`. Devuelve null si no hay fila: una
-   ubicación sin configurar no es un error, solo significa que el prompt no
-   lleva líneas de ubicación. */
+/* The global setting, read from `setting`. Returns null if there's no row: an
+   unconfigured location isn't an error, it just means the prompt carries no
+   location lines. */
 export async function ubicacionGuardada() {
   const { rows } = await db.query("SELECT value FROM setting WHERE key = 'location'");
   return rows[0]?.value || null;
 }
 
-/* Otro mensaje en una conversación que ya existe.
+/* Another message in an existing conversation.
 
-   Esto es lo que convierte el historial en chats de verdad y no en un registro
-   de ejecuciones sueltas. Se apoya en el `session_id` del SDK, que es lo mismo
-   que usa la reanudación tras una aprobación: si no hay sesión no hay nada que
-   continuar, y decirlo es mejor que empezar una conversación nueva a
-   escondidas con el nombre de la vieja. */
+   This is what turns the history into real chats instead of a log of loose
+   runs. It relies on the SDK's `session_id`, the same thing the resume after
+   an approval uses: with no session there's nothing to continue, and saying so
+   beats quietly starting a new conversation under the old one's name. */
 export async function continuarRun(runId, prompt) {
   const { rows } = await db.query('SELECT * FROM run WHERE id = $1', [runId]);
   const run = rows[0];
   if (!run) return null;
 
   if (run.status === 'running' || run.status === 'queued' || run.status === 'awaiting_approval') {
-    const e = new Error('esa conversación todavía está trabajando');
+    const e = new Error('that conversation is still working');
     e.code = 'run_busy';
     throw e;
   }
   if (!run.session_id) {
-    const e = new Error('esa conversación no tiene sesión: no se puede continuar');
+    const e = new Error('that conversation has no session: it cannot be continued');
     e.code = 'no_session';
     throw e;
   }
@@ -440,7 +439,7 @@ export async function continuarRun(runId, prompt) {
   return { id: run.id, status: 'running', model: run.model };
 }
 
-/* Decide una aprobación pendiente y, si procede, reanuda. */
+/* Decides a pending approval and, if appropriate, resumes. */
 export async function decidir(approvalId, decision, denyReason) {
   const { rows } = await db.query(
     `UPDATE approval SET decision = $2, deny_reason = $3, decided_at = now()
@@ -457,13 +456,13 @@ export async function decidir(approvalId, decision, denyReason) {
   await evento(runId, 'approval_decided', { approvalId, decision, tool: rows[0].tool_name });
 
   if (!run.session_id) {
-    await estado(runId, 'failed', { error: 'no hay session_id: imposible reanudar', ended: true });
+    await estado(runId, 'failed', { error: 'no session_id: cannot resume', ended: true });
     return { runId, resumed: false };
   }
 
   await estado(runId, 'running');
-  /* Prompt vacío: no se le pide nada nuevo, solo que siga con la llamada que
-     tenía pendiente. */
+  /* Empty prompt: nothing new is asked, it just carries on with the call it
+     had pending. */
   lanzar(run, { prompt: '', resume: run.session_id });
   return { runId, resumed: true };
 }

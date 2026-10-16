@@ -1,8 +1,7 @@
-/* PROCESO A — pide un gasto, el hook DIFIERE, y el proceso muere.
+/* PROCESS A — asks for an expense, the hook DEFERS, and the process dies.
 
-   Lo que se guarda para el proceso B es solo lo que sobreviviría a un
-   reinicio real: el session_id y la herramienta que quedó pendiente. Nada
-   en memoria. */
+   All that's kept for process B is what would survive a real restart: the
+   session_id and the tool left pending. Nothing in memory. */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import fs from 'node:fs';
@@ -12,29 +11,29 @@ prepararDir();
 fs.rmSync(EFECTO, { force: true });
 fs.rmSync(ESTADO, { force: true });
 
-console.log('── PROCESO A (pid ' + process.pid + ') ──');
+console.log('── PROCESS A (pid ' + process.pid + ') ──');
 
 let resultado = null;
 for await (const m of query({
-  prompt: 'Registra un gasto de 12.50 por "café de la reunión". Usa la herramienta.',
-  options: { ...OPCIONES_BASE, hooks: hooks('defer', 'espera aprobación humana') }
+  prompt: 'Log an expense of 12.50 for "meeting coffee". Use the tool.',
+  options: { ...OPCIONES_BASE, hooks: hooks('defer', 'waiting for human approval') }
 })) {
   if (m.type === 'system' && m.subtype === 'init') {
-    console.log('  sesión:', m.session_id);
+    console.log('  session:', m.session_id);
     console.log('  [init] mcp_servers:', JSON.stringify(m.mcp_servers));
-    console.log('  [init] tools con "spike":', JSON.stringify((m.tools||[]).filter(t=>String(t).includes('spike'))));
+    console.log('  [init] tools with "spike":', JSON.stringify((m.tools||[]).filter(t=>String(t).includes('spike'))));
   }
   if (m.type === 'result') resultado = m;
 }
 
 if (!resultado) {
-  console.error('FALLO: no llegó ningún mensaje result');
+  console.error('FAIL: no result message arrived');
   process.exit(1);
 }
 
 console.log('  terminal_reason:', resultado.terminal_reason);
 console.log('  deferred_tool_use:', JSON.stringify(resultado.deferred_tool_use || null));
-console.log('  coste USD:', resultado.total_cost_usd);
+console.log('  cost USD:', resultado.total_cost_usd);
 
 fs.writeFileSync(ESTADO, JSON.stringify({
   session_id: resultado.session_id,
@@ -44,16 +43,16 @@ fs.writeFileSync(ESTADO, JSON.stringify({
 }, null, 2));
 
 const efectoTrasA = fs.existsSync(EFECTO) ? fs.readFileSync(EFECTO, 'utf8') : '';
-console.log('  efecto tras A (debe estar VACÍO):', JSON.stringify(efectoTrasA));
+console.log('  effect after A (must be EMPTY):', JSON.stringify(efectoTrasA));
 
-/* El contrato de A: la herramienta NO se ejecutó y quedó constancia de cuál
-   era. Si algo de esto falla, el resto del spike no tiene sentido. */
+/* A's contract: the tool did NOT run, and there's a record of which tool it
+   was. If any of this fails, the rest of the spike is meaningless. */
 if (efectoTrasA !== '') {
-  console.error('FALLO: el defer no impidió la ejecución');
+  console.error('FAIL: the defer did not prevent execution');
   process.exit(1);
 }
 if (resultado.terminal_reason !== 'tool_deferred') {
-  console.error(`FALLO: esperaba terminal_reason=tool_deferred, llegó ${resultado.terminal_reason}`);
+  console.error(`FAIL: expected terminal_reason=tool_deferred, got ${resultado.terminal_reason}`);
   process.exit(1);
 }
-console.log('  A OK: diferido y sin ejecutar\n');
+console.log('  A OK: deferred and not executed\n');

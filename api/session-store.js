@@ -1,26 +1,26 @@
-/* tu empresa — APM · SessionStore del Agent SDK sobre Postgres.
+/* Acme — APM · Agent SDK SessionStore on Postgres.
 
-   POR QUÉ EXISTE
-   El SDK guarda el transcript de cada sesión en ~/.claude/projects/…, dentro
-   del contenedor, y un `docker compose up -d --build` se lo lleva. Como una
-   aprobación diferida se reanuda POR session_id contra ese transcript, sin
-   esta copia toda aprobación pendiente moriría en el siguiente despliegue.
-   Medido en docs/SPIKE-02-container.md: con esto, sobrevive.
+   WHY IT EXISTS
+   The SDK stores each session's transcript in ~/.claude/projects/…, inside the
+   container, and a `docker compose up -d --build` wipes it. Since a deferred
+   approval is resumed BY session_id against that transcript, without this copy
+   every pending approval would die on the next deploy. Measured in
+   docs/SPIKE-02-container.md: with this, it survives.
 
-   El SDK sigue escribiendo en disco (el mirror se dispara DESPUÉS del write
-   local, y `sessionStore` es incompatible con `persistSession: false`).
-   Postgres es la copia que sobrevive, no un reemplazo.
+   The SDK still writes to disk (the mirror fires AFTER the local write, and
+   `sessionStore` is incompatible with `persistSession: false`). Postgres is
+   the copy that survives, not a replacement.
 
-   ⚠️ El `projectKey` lo deriva el SDK del `cwd` saneado y NO expone opción
-   para fijarlo. Por eso AGENT_CWD es una constante del despliegue: cambiar el
-   WORKDIR del contenedor invalida todas las aprobaciones pendientes. Falla
-   ruidosamente ("No conversation found with session ID"), pero falla. */
+   ⚠️ The SDK derives `projectKey` from the sanitized `cwd` and exposes NO
+   option to set it. That's why AGENT_CWD is a deployment constant: changing
+   the container's WORKDIR invalidates every pending approval. It fails loudly
+   ("No conversation found with session ID"), but it fails. */
 
 import { db } from './db.js';
 
-/* El transcript principal llega como `subpath: undefined`; la cadena vacía es
-   inválida en el contrato. Se normaliza a '' en la tabla porque la clave
-   única no puede deduplicar sobre NULL (en SQL, NULL != NULL). */
+/* The main transcript arrives as `subpath: undefined`; the empty string is
+   invalid in the contract. It's normalized to '' in the table because the
+   unique key can't dedupe on NULL (in SQL, NULL != NULL). */
 const MAIN = '';
 
 export const sessionStore = {
@@ -29,12 +29,12 @@ export const sessionStore = {
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-      /* UNNEST … WITH ORDINALITY: un solo round-trip preservando el orden del
-         array, que el contrato exige mantener dentro de un proceso.
-         ON CONFLICT DO NOTHING implementa la idempotencia por `uuid` que pide
-         el SDK: reintenta `append()` 3 veces y `importSessionToStore()`
-         reproduce entradas ya escritas. Sin esto el transcript se duplica y
-         la sesión reanudada ve el turno dos veces. */
+      /* UNNEST … WITH ORDINALITY: a single round-trip preserving the array
+         order, which the contract requires within a process.
+         ON CONFLICT DO NOTHING implements the `uuid` idempotency the SDK asks
+         for: it retries `append()` 3 times and `importSessionToStore()`
+         replays entries already written. Without this the transcript gets
+         duplicated and the resumed session sees the turn twice. */
       await client.query(
         `INSERT INTO session_entry (project_key, session_id, subpath, entry_uuid, entry)
          SELECT $1, $2, $3, u.entry_uuid, u.entry
@@ -53,10 +53,9 @@ export const sessionStore = {
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
-      /* Se relanza a propósito: el SDK reintenta y, si sigue fallando, emite
-         un `mirror_error`. Tragárselo aquí convertiría una pérdida de datos
-         en silencio, que es exactamente el fallo que este proyecto no se
-         puede permitir. */
+      /* Rethrown on purpose: the SDK retries and, if it keeps failing, emits a
+         `mirror_error`. Swallowing it here would turn data loss into silence,
+         which is exactly the failure this project can't afford. */
       throw err;
     } finally {
       client.release();
@@ -70,15 +69,15 @@ export const sessionStore = {
         ORDER BY id`,
       [key.projectKey, key.sessionId, key.subpath ?? MAIN]
     );
-    /* null = nunca escrita. Postgres devuelve JSONB ya parseado y puede
-       reordenar las claves del objeto; da igual, el SDK nunca compara bytes
-       (solo exige deep-equal). */
+    /* null = never written. Postgres returns JSONB already parsed and may
+       reorder the object's keys; that's fine, the SDK never compares bytes
+       (it only requires deep-equal). */
     return rows.length ? rows.map((r) => r.entry) : null;
   },
 
-  /* Sin esto, al reanudar solo se materializa el transcript principal y se
-     pierden los de los subagentes. Opcional en el contrato, obligatorio para
-     nosotros en cuanto haya orquestador. */
+  /* Without this, resuming only materializes the main transcript and the
+     subagents' transcripts are lost. Optional in the contract, mandatory for
+     us as soon as there's an orchestrator. */
   async listSubkeys(key) {
     const { rows } = await db.query(
       `SELECT DISTINCT subpath FROM session_entry
@@ -96,15 +95,15 @@ export const sessionStore = {
         GROUP BY session_id`,
       [projectKey]
     );
-    /* mtime en milisegundos epoch enteros, como pide el contrato. El orden no
-       importa: lo ordena el SDK. */
+    /* mtime in whole epoch milliseconds, as the contract requires. Order
+       doesn't matter: the SDK sorts it. */
     return rows.map((r) => ({
       sessionId: r.session_id,
       mtime: Math.floor(new Date(r.mtime).getTime())
     }));
   }
 
-  /* `delete()` se omite a propósito. Es opcional y su ausencia es un no-op
-     válido para backends append-only — que es justo la política de este
-     proyecto: a apm_app no se le concede DELETE, aquí se archiva. */
+  /* `delete()` is left out on purpose. It's optional and its absence is a
+     valid no-op for append-only backends — which is exactly this project's
+     policy: apm_app isn't granted DELETE; here we archive. */
 };

@@ -1,9 +1,9 @@
-/* Prospección por llamadas: la lógica que NO puede fallar en silencio.
-   Un teléfono mal normalizado duplica leads (llamas dos veces al mismo), una
-   ventana horaria mal calculada es una infracción TCPA, y un "no me llames"
-   que no suprime es una denuncia. Todo con reloj inyectado.
+/* Call prospecting: the logic that must NOT fail silently.
+   A badly normalized phone duplicates leads (you call the same one twice), a
+   miscalculated calling window is a TCPA violation, and a "don't call me" that
+   doesn't suppress is a lawsuit. Everything with an injected clock.
 
-   Correr:  node --test leads-logic.test.js  */
+   Run:  node --test leads-logic.test.js  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,46 +12,46 @@ import { dentroDeHorario, proximaApertura } from './call-window.js';
 import { reglasDeResultado, ordenCola, RESULTADOS } from './lead-queue.js';
 import { semanaIso, rangoSemana, scoreboard } from './scoreboard.js';
 
-// ── Teléfono ────────────────────────────────────────────────────
-test('tres formatos del mismo número dan el mismo E.164', () => {
+// ── Phone ───────────────────────────────────────────────────────
+test('three formats of the same number give the same E.164', () => {
   for (const t of ['(347) 555-0174', '3475550174', '+1 347-555-0174', '1-347-555-0174', '347.555.0174']) {
     assert.equal(normalizarTelefono(t), '+13475550174', t);
   }
 });
 
-test('inválidos: corto, extensión, no US, vacío', () => {
+test('invalid: short, extension, non-US, empty', () => {
   for (const t of ['407-5474', '(347) 555-0174 ext 12', '+44 20 7946 0958', '', null, '0475550174', '1234567890']) {
     assert.equal(normalizarTelefono(t), null, String(t));
   }
 });
 
-test('formato de pantalla', () => {
+test('display format', () => {
   assert.equal(telefonoVisible('+13475550174'), '(347) 555-0174');
 });
 
-// ── Ventana TCPA ────────────────────────────────────────────────
+// ── TCPA window ─────────────────────────────────────────────────
 const NY = 'America/New_York';
-test('8:00-21:00 hora local del lead, bordes incluidos/excluidos', () => {
+test('8:00-21:00 in the lead\'s local time, edges included/excluded', () => {
   assert.equal(dentroDeHorario(new Date('2026-09-24T11:59:00Z'), NY), false); // 7:59 EDT
   assert.equal(dentroDeHorario(new Date('2026-09-24T12:00:00Z'), NY), true);  // 8:00
   assert.equal(dentroDeHorario(new Date('2026-09-25T00:59:00Z'), NY), true);  // 20:59
   assert.equal(dentroDeHorario(new Date('2026-09-25T01:00:00Z'), NY), false); // 21:00
 });
 
-test('horario de invierno (EST): 8:00 son las 13:00Z', () => {
+test('winter time (EST): 8:00 is 13:00Z', () => {
   assert.equal(dentroDeHorario(new Date('2026-12-10T12:59:00Z'), NY), false);
   assert.equal(dentroDeHorario(new Date('2026-12-10T13:00:00Z'), NY), true);
 });
 
-test('próxima apertura: de noche → mañana 8:00; de madrugada → hoy 8:00', () => {
+test('next opening: at night → tomorrow 8:00; before dawn → today 8:00', () => {
   assert.equal(proximaApertura(new Date('2026-09-25T02:00:00Z'), NY).toISOString(), '2026-09-25T12:00:00.000Z');
   assert.equal(proximaApertura(new Date('2026-09-24T10:00:00Z'), NY).toISOString(), '2026-09-24T12:00:00.000Z');
 });
 
-// ── Reglas de resultado ─────────────────────────────────────────
+// ── Outcome rules ──────────────────────────────────────────────
 const AHORA = new Date('2026-09-24T14:00:00Z');
 
-test('no_llamar y numero_malo fuerzan NO volver a llamar y suprimen, aunque el cliente mande true', () => {
+test('no_llamar and numero_malo force NO call-back and suppress, even if the client sends true', () => {
   for (const outcome of ['no_llamar', 'numero_malo']) {
     const r = reglasDeResultado({ outcome, callAgain: true, nextCallAt: '2026-09-30T14:00:00Z' }, AHORA);
     assert.equal(r.ok, true);
@@ -62,7 +62,7 @@ test('no_llamar y numero_malo fuerzan NO volver a llamar y suprimen, aunque el c
   }
 });
 
-test('volver a llamar exige fecha futura', () => {
+test('a call-back requires a future date', () => {
   assert.equal(reglasDeResultado({ outcome: 'llamar_luego', callAgain: true }, AHORA).ok, false);
   assert.equal(reglasDeResultado({ outcome: 'llamar_luego', callAgain: true, nextCallAt: '2026-09-20T10:00:00Z' }, AHORA).ok, false);
   const r = reglasDeResultado({ outcome: 'llamar_luego', callAgain: true, nextCallAt: '2026-09-25T14:00:00Z' }, AHORA);
@@ -70,7 +70,7 @@ test('volver a llamar exige fecha futura', () => {
   assert.equal(r.nextCallAt, '2026-09-25T14:00:00.000Z');
 });
 
-test('estado del lead según resultado', () => {
+test('lead status by outcome', () => {
   const s = o => reglasDeResultado({ outcome: o, callAgain: false }, AHORA).leadStatus;
   assert.equal(s('no_contesto'), 'llamado');
   assert.equal(s('buzon'), 'llamado');
@@ -79,13 +79,13 @@ test('estado del lead según resultado', () => {
   assert.equal(s('no_interesa'), 'descartado');
 });
 
-test('resultado desconocido y notas enormes se rechazan', () => {
+test('unknown outcome and huge notes are rejected', () => {
   assert.equal(reglasDeResultado({ outcome: 'otro' }, AHORA).ok, false);
   assert.equal(reglasDeResultado({ outcome: 'buzon', notes: 'x'.repeat(5001) }, AHORA).ok, false);
   assert.ok(RESULTADOS.includes('buzon'));
 });
 
-test('cola: primero los "llamar luego" vencidos (el más antiguo), luego los nuevos (el más reciente)', () => {
+test('queue: overdue "call later" first (oldest), then new ones (newest)', () => {
   const leads = [
     { id: 'nuevo-viejo', status: 'nuevo', next_call_at: null, created_at: '2026-09-01T00:00:00Z' },
     { id: 'futuro', status: 'llamado', next_call_at: '2026-09-30T00:00:00Z', created_at: '2026-09-01T00:00:00Z' },
@@ -98,20 +98,20 @@ test('cola: primero los "llamar luego" vencidos (el más antiguo), luego los nue
 });
 
 // ── Scoreboard ──────────────────────────────────────────────────
-test('semana ISO en hora de NY (domingo 23:30 EDT sigue siendo esa semana)', () => {
-  assert.equal(semanaIso(new Date('2026-09-28T03:30:00Z')), '2026-W39'); // dom 27 23:30 EDT
-  assert.equal(semanaIso(new Date('2026-09-28T05:00:00Z')), '2026-W40'); // lun 28 01:00 EDT
+test('ISO week in NY time (Sunday 23:30 EDT is still that week)', () => {
+  assert.equal(semanaIso(new Date('2026-09-28T03:30:00Z')), '2026-W39'); // Sun 27, 23:30 EDT
+  assert.equal(semanaIso(new Date('2026-09-28T05:00:00Z')), '2026-W40'); // Mon 28, 01:00 EDT
   const r = rangoSemana('2026-W39');
   assert.equal(r.desde.toISOString(), '2026-09-21T04:00:00.000Z');
   assert.equal(r.hasta.toISOString(), '2026-09-28T04:00:00.000Z');
 });
 
-test('scoreboard: cifras y tasas exactas, las filas corregidas no cuentan', () => {
+test('scoreboard: exact counts and rates, corrected rows don\'t count', () => {
   const log = [
     { id: 'a', outcome: 'no_contesto' }, { id: 'b', outcome: 'buzon' }, { id: 'c', outcome: 'buzon' },
     { id: 'd', outcome: 'no_interesa' }, { id: 'e', outcome: 'interesado' }, { id: 'f', outcome: 'demo' },
-    { id: 'g', outcome: 'no_llamar' }, { id: 'h', outcome: 'interesado' },       // mal marcada…
-    { id: 'i', outcome: 'llamar_luego', corrects_id: 'h' }                         // …y corregida
+    { id: 'g', outcome: 'no_llamar' }, { id: 'h', outcome: 'interesado' },       // tapped by mistake…
+    { id: 'i', outcome: 'llamar_luego', corrects_id: 'h' }                         // …and corrected
   ];
   const s = scoreboard(log);
   assert.equal(s.calls, 8);
@@ -125,7 +125,7 @@ test('scoreboard: cifras y tasas exactas, las filas corregidas no cuentan', () =
   assert.equal(s.interestRate, 0.4);    // (1+1)/5
 });
 
-test('scoreboard vacío no divide por cero', () => {
+test('an empty scoreboard does not divide by zero', () => {
   const s = scoreboard([]);
   assert.equal(s.calls, 0);
   assert.equal(s.contactRate, 0);

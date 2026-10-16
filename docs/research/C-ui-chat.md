@@ -1,72 +1,77 @@
-# Categoría C — UI de chat y Generative UI para APM
+# Category C — Chat UI and Generative UI for APM
 
-**Fecha de investigación:** 2 de agosto de 2026
-**Contexto:** dashboard React + backend propio en Node con **Claude Agent SDK**. El agente corre en NUESTRO servidor. La UI solo debe consumir NUESTRO stream.
-**Todo lo marcado con ✅ está verificado contra npm registry, GitHub API o la documentación oficial en esta fecha.** Lo marcado con ⚠️ NO VERIFICADO se señala explícitamente.
+**Research date:** August 2, 2026
+**Context:** a React dashboard + our own Node backend with the **Claude Agent SDK**. The agent runs on OUR server. The UI must only consume OUR stream.
+**Everything marked ✅ is verified against the npm registry, the GitHub API or the official documentation on this date.** Anything ⚠️ NOT VERIFIED is flagged explicitly.
 
----
-
-## 0. Recomendación en una línea
-
-> **assistant-ui** (`@assistant-ui/react` + `@assistant-ui/react-ai-sdk`), consumiendo nuestro endpoint SSE mediante `useChatRuntime({ transport: new AssistantChatTransport({ api }) })`, con el protocolo **AI SDK UI Message Stream** emitido a mano desde nuestro backend Node.
-
-Es la única opción que cumple **las tres condiciones no negociables a la vez**: backend propio sin imponer runtime ajeno, generative UI por herramienta, y aprobación human-in-the-loop nativa.
+> Postscript: in the end the panel was built with plain React + EventSource (see
+> `web/src/Chat.jsx`), because the backend's SSE contract stayed simple (one named event per
+> type) and the approval flow lives in the server. This report is kept as the research that
+> led there.
 
 ---
 
-## 1. Tabla comparativa (candidatos principales)
+## 0. One-line recommendation
 
-| Librería | Licencia | Versión actual | Último commit / publish | ¿Requiere Next.js? | ¿Backend custom? | Generative UI | HITL (aprobación) | Theming | Peso |
+> **assistant-ui** (`@assistant-ui/react` + `@assistant-ui/react-ai-sdk`), consuming our SSE endpoint via `useChatRuntime({ transport: new AssistantChatTransport({ api }) })`, with the **AI SDK UI Message Stream** protocol emitted by hand from our Node backend.
+
+It's the only option that meets **all three non-negotiable conditions at once**: our own backend without imposing someone else's runtime, per-tool generative UI, and native human-in-the-loop approval.
+
+---
+
+## 1. Comparison table (main candidates)
+
+| Library | License | Current version | Last commit / publish | Requires Next.js? | Custom backend? | Generative UI | HITL (approval) | Theming | Weight |
 |---|---|---|---|---|---|---|---|---|---|
-| **assistant-ui** | MIT ✅ | `@assistant-ui/react` **0.15.1** (29-jul-2026) ✅ | commits del **2-ago-2026** ✅ (repo vivo, 11.365 ★) | **No** ✅ (ejemplo oficial `with-react-router` usa Vite 8) — solo el compilador `"use generative"` exige Next | **Sí**, 4 runtimes distintos ✅ | **Sí**, componente React por tool ✅ | **Sí**, nativo (`approval` + `respondToApproval`, o `humanTool()` + `addResult`) ✅ | Excelente: los componentes se **copian a tu repo** vía registry shadcn → eres dueño del TSX ✅ | 547 KB min / **162,7 KB gzip**, 19 deps ✅ |
-| **AI Elements + AI SDK (`useChat`)** | Apache-2.0 ✅ | `ai` **7.0.48** (1-ago-2026); `ai-elements` 1.9.0 ✅ | vercel/ai push **2-ago-2026** ✅ | **No** (pero AI Elements exige Tailwind **y** shadcn/ui) ✅ | **Sí** (`DefaultChatTransport`/`ChatTransport`) ✅ | Sí, pero lo cableas tú a mano por `part.type` | **Sí**, protocolo nativo de aprobación ✅ | Bueno (es shadcn puro) | `ai` 84,8 KB gz + `@ai-sdk/react` 63,5 KB gz ✅ |
-| **CopilotKit** | MIT ✅ | **1.64.2** (31-jul-2026) ✅ | push **2-ago-2026** ✅ (36.404 ★) | No | Solo si hablas **AG-UI** (protocolo propio) ⚠️ acoplamiento alto | Sí (`useCopilotAction` + render) | Sí (`renderAndWaitForResponse`) ⚠️ nombre no verificado en v1.64 | Mediocre: trae su propio CSS, `lit` + web components | **Muy pesado**: 29 deps directas en `react-core` ✅ (incluye `lit`, `rxjs`, `katex`, `@jetbrains/websandbox`, `@tanstack/react-virtual`) |
-| **Tambo** | MIT ✅ | `@tambo-ai/react` 1.3.0 (15-jun-2026) ✅ | push 30-jul-2026 ✅ (11.157 ★) | No | **No** — impone **su** servidor de agente (Tambo Cloud o self-host de Tambo) ✅ | Sí (registro de componentes + Zod) | ⚠️ No documentado | Bueno | n/d |
-| **Deep Chat** | MIT ✅ | 2.5.0 (19-jul-2026) ✅ | push 1-ago-2026 ✅ (3.685 ★) | No | Sí (conecta a cualquier API) | **No** (es un web component, no renderiza tus componentes React por tool) | **No** | Custom vía props | n/d |
-| **Ant Design X** | MIT ✅ | 2.9.0 (28-jul-2026) ✅ | push 1-ago-2026 ✅ (4.700 ★) | No | Sí | Parcial | **No** | ❌ Arrastra el design system de Ant Design → pelea directa con "Spectra" | pesado (antd) |
+| **assistant-ui** | MIT ✅ | `@assistant-ui/react` **0.15.1** (29-Jul-2026) ✅ | commits on **2-Aug-2026** ✅ (live repo, 11,365 ★) | **No** ✅ (the official `with-react-router` example uses Vite 8) — only the `"use generative"` compiler needs Next | **Yes**, 4 different runtimes ✅ | **Yes**, a React component per tool ✅ | **Yes**, native (`approval` + `respondToApproval`, or `humanTool()` + `addResult`) ✅ | Excellent: components are **copied into your repo** via the shadcn registry → you own the TSX ✅ | 547 KB min / **162.7 KB gzip**, 19 deps ✅ |
+| **AI Elements + AI SDK (`useChat`)** | Apache-2.0 ✅ | `ai` **7.0.48** (1-Aug-2026); `ai-elements` 1.9.0 ✅ | vercel/ai push **2-Aug-2026** ✅ | **No** (but AI Elements requires Tailwind **and** shadcn/ui) ✅ | **Yes** (`DefaultChatTransport`/`ChatTransport`) ✅ | Yes, but you wire it by hand per `part.type` | **Yes**, a native approval protocol ✅ | Good (pure shadcn) | `ai` 84.8 KB gz + `@ai-sdk/react` 63.5 KB gz ✅ |
+| **CopilotKit** | MIT ✅ | **1.64.2** (31-Jul-2026) ✅ | push **2-Aug-2026** ✅ (36,404 ★) | No | Only if you speak **AG-UI** (its own protocol) ⚠️ high coupling | Yes (`useCopilotAction` + render) | Yes (`renderAndWaitForResponse`) ⚠️ name not verified in v1.64 | Mediocre: brings its own CSS, `lit` + web components | **Very heavy**: 29 direct deps in `react-core` ✅ (incl. `lit`, `rxjs`, `katex`, `@jetbrains/websandbox`, `@tanstack/react-virtual`) |
+| **Tambo** | MIT ✅ | `@tambo-ai/react` 1.3.0 (15-Jun-2026) ✅ | push 30-Jul-2026 ✅ (11,157 ★) | No | **No** — imposes **its** agent server (Tambo Cloud or a Tambo self-host) ✅ | Yes (component registry + Zod) | ⚠️ Not documented | Good | n/a |
+| **Deep Chat** | MIT ✅ | 2.5.0 (19-Jul-2026) ✅ | push 1-Aug-2026 ✅ (3,685 ★) | No | Yes (connects to any API) | **No** (a web component; doesn't render your React components per tool) | **No** | Custom via props | n/a |
+| **Ant Design X** | MIT ✅ | 2.9.0 (28-Jul-2026) ✅ | push 1-Aug-2026 ✅ (4,700 ★) | No | Yes | Partial | **No** | ❌ Drags in the Ant Design system → a head-on fight with "Spectra" | heavy (antd) |
 
 ---
 
-## 2. Lo mejor valorado en GitHub (búsqueda abierta)
+## 2. The best rated on GitHub (open search)
 
-Búsqueda vía GitHub Search API (`topic:generative-ui`, `topic:ai-chatbot`, `topic:chat-ui`, keywords), filtrando por actividad reciente (`pushed:>2026-02-01`) y ordenando por estrellas. Datos del 2-ago-2026 ✅
+Search via the GitHub Search API (`topic:generative-ui`, `topic:ai-chatbot`, `topic:chat-ui`, keywords), filtered by recent activity (`pushed:>2026-02-01`) and sorted by stars. Data from 2-Aug-2026 ✅
 
-| ★ | Repo | Licencia | Último push | Tipo | ¿Impone backend? | SSE custom | Tool UI | HITL |
+| ★ | Repo | License | Last push | Type | Imposes a backend? | Custom SSE | Tool UI | HITL |
 |---|---|---|---|---|---|---|---|---|
-| 36.404 | `CopilotKit/CopilotKit` | MIT | 2026-08-02 | Framework completo | Sí, protocolo **AG-UI** | vía AG-UI | Sí | Sí |
-| 25.958 | `vercel/ai` (AI SDK) | Apache-2.0 | 2026-08-02 | SDK + hooks (headless) | No | **Sí** | manual | **Sí** |
-| 15.099 | `ag-ui-protocol/ag-ui` | MIT | 2026-07-31 | **Protocolo**, no UI | — | — | — | — |
-| **11.365** | **`assistant-ui/assistant-ui`** | **MIT** | **2026-08-02** | **Componentes + runtimes (headless + styled)** | **No** | **Sí** | **Sí** | **Sí** |
-| 11.157 | `tambo-ai/tambo` | MIT | 2026-07-30 | SDK generative UI | **Sí (servidor Tambo)** | No | Sí | ⚠️ n/d |
-| 8.264 | `thesysdev/openui` | MIT | 2026-08-01 | **Spec/DSL** (el modelo *escribe* la UI en "OpenUI Lang") | No | Sí (headless) | Otro paradigma | ⚠️ n/d |
-| 4.700 | `ant-design/x` | MIT | 2026-08-01 | Componentes (antd) | No | Sí | Parcial | No |
-| 3.685 | `OvidijusParsiunas/deep-chat` | MIT | 2026-08-01 | Web component | No | Sí | No | No |
-| 1.474 | `CopilotKit/OpenGenerativeUI` | MIT | 2026-06-10 | Framework | — | — | Sí | ⚠️ n/d |
-| 795 | `Blazity/shadcn-chatbot-kit` | MIT | **2026-02-26** (estancado) | Copy-paste shadcn | No | Sí | No | No |
+| 36,404 | `CopilotKit/CopilotKit` | MIT | 2026-08-02 | Full framework | Yes, the **AG-UI** protocol | via AG-UI | Yes | Yes |
+| 25,958 | `vercel/ai` (AI SDK) | Apache-2.0 | 2026-08-02 | SDK + hooks (headless) | No | **Yes** | manual | **Yes** |
+| 15,099 | `ag-ui-protocol/ag-ui` | MIT | 2026-07-31 | **Protocol**, not UI | — | — | — | — |
+| **11,365** | **`assistant-ui/assistant-ui`** | **MIT** | **2026-08-02** | **Components + runtimes (headless + styled)** | **No** | **Yes** | **Yes** | **Yes** |
+| 11,157 | `tambo-ai/tambo` | MIT | 2026-07-30 | Generative UI SDK | **Yes (Tambo server)** | No | Yes | ⚠️ n/a |
+| 8,264 | `thesysdev/openui` | MIT | 2026-08-01 | **Spec/DSL** (the model *writes* the UI in "OpenUI Lang") | No | Yes (headless) | Another paradigm | ⚠️ n/a |
+| 4,700 | `ant-design/x` | MIT | 2026-08-01 | Components (antd) | No | Yes | Partial | No |
+| 3,685 | `OvidijusParsiunas/deep-chat` | MIT | 2026-08-01 | Web component | No | Yes | No | No |
+| 1,474 | `CopilotKit/OpenGenerativeUI` | MIT | 2026-06-10 | Framework | — | — | Yes | ⚠️ n/a |
+| 795 | `Blazity/shadcn-chatbot-kit` | MIT | **2026-02-26** (stalled) | shadcn copy-paste | No | Yes | No | No |
 
-**Conclusiones de la búsqueda abierta:**
+**Conclusions from the open search:**
 
-1. **Nada nuevo destrona a assistant-ui** para nuestro caso. Los dos repos con más estrellas son CopilotKit (que nos impone AG-UI) y el propio AI SDK (que es el *transporte*, no la UI — y assistant-ui se apoya en él).
-2. **`ag-ui` (15k ★) es un protocolo, no una librería de UI.** Merece la pena conocerlo porque assistant-ui *también* tiene un runtime AG-UI, así que si algún día queremos hablar AG-UI, no hay que cambiar de librería de UI.
-3. **OpenUI (thesys, 8.2k ★) resuelve otro problema:** que el *modelo* genere la UI mediante un DSL. Nosotros queremos lo contrario — que el agente invoque **nuestros** componentes React tipados. Descartado por paradigma, no por calidad.
-4. **`shadcn-chatbot-kit` está efectivamente parado** (último push feb-2026) y no tiene tool UI ni HITL. No es candidato.
+1. **Nothing new dethrones assistant-ui** for our case. The two repos with the most stars are CopilotKit (which imposes AG-UI on us) and the AI SDK itself (which is the *transport*, not the UI — and assistant-ui builds on it).
+2. **`ag-ui` (15k ★) is a protocol, not a UI library.** Worth knowing because assistant-ui *also* has an AG-UI runtime, so if we ever want to speak AG-UI, we don't have to change UI libraries.
+3. **OpenUI (thesys, 8.2k ★) solves a different problem:** having the *model* generate the UI through a DSL. We want the opposite — the agent invoking **our** typed React components. Ruled out by paradigm, not by quality.
+4. **`shadcn-chatbot-kit` has effectively stopped** (last push Feb-2026) and has no tool UI or HITL. Not a candidate.
 
 ---
 
-## 3. Respuestas a las preguntas concretas
+## 3. Answers to the specific questions
 
-### 3.1 ¿Cuál permite streaming desde un endpoint SSE propio con el mínimo acoplamiento?
+### 3.1 Which allows streaming from our own SSE endpoint with minimal coupling?
 
-**assistant-ui**, y tiene **cuatro** adaptadores oficiales (verificado en `assistant-ui.com/docs/runtimes/custom/overview`) ✅:
+**assistant-ui**, and it has **four** official adapters (verified at `assistant-ui.com/docs/runtimes/custom/overview`) ✅:
 
-| API exacta | Cuándo usarla | ¿Soporta HITL? |
+| Exact API | When to use it | Supports HITL? |
 |---|---|---|
-| `useLocalRuntime(adapter)` con `ChatModelAdapter.run` | Máximo control; tú parseas el SSE | **Sí** ✅ |
-| `useChatRuntime({ transport })` + `AssistantChatTransport` | Nuestro backend habla el protocolo AI SDK UI Message Stream | **Sí** ✅ |
-| `useDataStreamRuntime({ api })` | Igual pero más simple | **❌ NO** — ver §5 |
-| `useAssistantTransportRuntime({...})` | Backend que emite *snapshots* de estado del agente | ⚠️ no verificado |
+| `useLocalRuntime(adapter)` with `ChatModelAdapter.run` | Maximum control; you parse the SSE | **Yes** ✅ |
+| `useChatRuntime({ transport })` + `AssistantChatTransport` | Our backend speaks the AI SDK UI Message Stream protocol | **Yes** ✅ |
+| `useDataStreamRuntime({ api })` | Same but simpler | **❌ NO** — see §5 |
+| `useAssistantTransportRuntime({...})` | A backend that emits agent-state *snapshots* | ⚠️ not verified |
 
-**El acoplamiento real es una sola línea:**
+**The real coupling is a single line:**
 
 ```ts
 const runtime = useChatRuntime({
@@ -74,13 +79,13 @@ const runtime = useChatRuntime({
 });
 ```
 
-(snippet verbatim de la doc oficial `docs/runtimes/ai-sdk/v7` ✅)
+(snippet verbatim from the official docs `docs/runtimes/ai-sdk/v7` ✅)
 
-Nuestro backend Node solo tiene que emitir SSE con la cabecera `x-vercel-ai-ui-message-stream: v1`. **No** necesitamos `streamText` ni ninguna pieza de Vercel en el servidor — el protocolo está documentado y lo escribimos a mano (ver §4.1).
+Our Node backend only has to emit SSE with the `x-vercel-ai-ui-message-stream: v1` header. We **don't** need `streamText` or any Vercel piece on the server — the protocol is documented and we write it by hand (see §4.1).
 
-### 3.2 ¿Cuál soporta generative UI y cómo se registra un componente por tool?
+### 3.2 Which supports generative UI, and how is a component registered per tool?
 
-**assistant-ui**, con tipo `ToolCallMessagePartComponent<TArgs, TResult>`. Props completas (verbatim de la doc) ✅:
+**assistant-ui**, with the type `ToolCallMessagePartComponent<TArgs, TResult>`. Full props (verbatim from the docs) ✅:
 
 ```ts
 type ToolCallMessagePartProps<TArgs, TResult> = {
@@ -98,58 +103,58 @@ type ToolCallMessagePartProps<TArgs, TResult> = {
 };
 ```
 
-Fíjate en `args` **durante** `status.type === "running"`: los argumentos llegan en streaming, así que puedes pintar un esqueleto y rellenarlo. Eso es generative UI de verdad, no un spinner.
+Note `args` **during** `status.type === "running"`: arguments arrive streaming, so you can draw a skeleton and fill it in. That's real generative UI, not a spinner.
 
-### 3.3 ¿Cuál permite aprobación human-in-the-loop? (requisito no negociable)
+### 3.3 Which allows human-in-the-loop approval? (non-negotiable requirement)
 
-**assistant-ui tiene DOS caminos, ambos verificados** ✅. Recomiendo el **Camino A** para APM:
+**assistant-ui has TWO paths, both verified** ✅. I recommend **Path A** for APM:
 
-**Camino A — `humanTool()` / `addResult` (más simple, cero cambios de protocolo).**
-El agente llama a una tool; la UI la renderiza con botones; el resultado vuelve como un tool result normal. Nuestro backend no necesita saber nada de "aprobaciones": recibe un tool result con `{approved: true}` y sigue. **Esta es la vía de menor riesgo con Claude Agent SDK.**
+**Path A — `humanTool()` / `addResult` (simpler, zero protocol changes).**
+The agent calls a tool; the UI renders it with buttons; the result comes back as a normal tool result. Our backend needn't know anything about "approvals": it receives a tool result with `{approved: true}` and continues. **This is the lowest-risk route with the Claude Agent SDK.**
 
-**Camino B — protocolo nativo de aprobación (`approval` + `respondToApproval`).**
-Más elegante y con estado de tres valores (pendiente / aprobado / denegado), pero exige que nuestro backend emita `tool-approval-request` y sepa reanudar. Verificado que existe en el protocolo (§4.1) y en el renderer de assistant-ui (§4.4).
+**Path B — the native approval protocol (`approval` + `respondToApproval`).**
+More elegant and with three-valued state (pending / approved / denied), but it requires our backend to emit `tool-approval-request` and know how to resume. Verified that it exists in the protocol (§4.1) and in assistant-ui's renderer (§4.4).
 
-**AI SDK solo** también lo soporta nativamente (`addToolApprovalResponse`, `sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses`) ✅ — pero tendrías que construir toda la UI del hilo desde cero.
+**The AI SDK alone** also supports it natively (`addToolApprovalResponse`, `sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses`) ✅ — but you'd have to build the whole thread UI from scratch.
 
-### 3.4 Peso del bundle y número de dependencias
+### 3.4 Bundle weight and number of dependencies
 
-Medido con la API de bundlephobia el 2-ago-2026 ✅ (son cifras del paquete completo, sin tree-shaking; el consumo real será menor):
+Measured with the bundlephobia API on 2-Aug-2026 ✅ (whole-package figures, no tree-shaking; real usage will be lower):
 
-| Paquete | minified | **gzip** | deps directas |
+| Package | minified | **gzip** | direct deps |
 |---|---|---|---|
-| `@assistant-ui/react` 0.15.1 | 547,0 KB | **162,7 KB** | 19 |
-| `@assistant-ui/react-ai-sdk` 1.4.2 | 457,7 KB | 121,3 KB | 7 (solapa con `ai`) |
-| `ai` 7.0.48 | 344,3 KB | 84,8 KB | 3 |
-| `@ai-sdk/react` 4.0.51 | 244,1 KB | 63,5 KB | 6 |
-| `@copilotkit/react-core` 1.64.2 | ❌ bundlephobia **falla al construirlo** | — | **29** |
+| `@assistant-ui/react` 0.15.1 | 547.0 KB | **162.7 KB** | 19 |
+| `@assistant-ui/react-ai-sdk` 1.4.2 | 457.7 KB | 121.3 KB | 7 (overlaps with `ai`) |
+| `ai` 7.0.48 | 344.3 KB | 84.8 KB | 3 |
+| `@ai-sdk/react` 4.0.51 | 244.1 KB | 63.5 KB | 6 |
+| `@copilotkit/react-core` 1.64.2 | ❌ bundlephobia **fails to build it** | — | **29** |
 
-Las 19 deps de assistant-ui son casi todas primitivas de Radix (que ya usaremos con shadcn) + `zustand` + `zod`. Las 29 de CopilotKit incluyen `lit`, `rxjs`, `katex`, `react-markdown`, `react-syntax-highlighter` y **`@jetbrains/websandbox`** — un sandbox de iframe que no vamos a usar y que no se puede tree-shakear fácilmente.
+assistant-ui's 19 deps are almost all Radix primitives (which we'd use with shadcn anyway) + `zustand` + `zod`. CopilotKit's 29 include `lit`, `rxjs`, `katex`, `react-markdown`, `react-syntax-highlighter` and **`@jetbrains/websandbox`** — an iframe sandbox we won't use and that can't easily be tree-shaken.
 
-### 3.5 ¿Cuál se puede tematizar sin luchar?
+### 3.5 Which can be themed without a fight?
 
-**assistant-ui, con diferencia.** No instalas componentes visuales: los **copias a tu repo** con el CLI de shadcn (verbatim de `docs/installation`) ✅:
+**assistant-ui, by far.** You don't install visual components: you **copy them into your repo** with the shadcn CLI (verbatim from `docs/installation`) ✅:
 
 ```bash
 npx shadcn@latest add @assistant-ui/thread @assistant-ui/thread-list
-# o sin configurar registry:
+# or without configuring a registry:
 npx shadcn@latest add https://r.assistant-ui.com/base/thread.json
 npm install @assistant-ui/react @assistant-ui/react-markdown class-variance-authority remark-gfm tw-shimmer zustand
 ```
 
-Lo que aterriza en `components/assistant-ui/thread.tsx` es TSX tuyo con clases Tailwind y variables CSS de shadcn (`--background`, `--primary`, `--muted-foreground`…). Para "Spectra" solo redefines esas variables en tu `globals.css` y el toggle claro/oscuro sale gratis con `.dark`. **No hay CSS de la librería que sobreescribir con `!important`.**
+What lands in `components/assistant-ui/thread.tsx` is your own TSX with Tailwind classes and shadcn CSS variables (`--background`, `--primary`, `--muted-foreground`…). For "Spectra" you just redefine those variables in your `globals.css`, and the light/dark toggle comes free with `.dark`. **No library CSS to override with `!important`.**
 
-Además, la lógica vive en **primitivas headless** (`ThreadPrimitive`, `MessagePrimitive`, `ComposerPrimitive`), así que si el `thread.tsx` generado no te gusta, lo tiras y montas el tuyo sin perder streaming, branching ni auto-scroll.
+Also, the logic lives in **headless primitives** (`ThreadPrimitive`, `MessagePrimitive`, `ComposerPrimitive`), so if you don't like the generated `thread.tsx`, you throw it away and build your own without losing streaming, branching or auto-scroll.
 
-Comparativa: CopilotKit inyecta su propio CSS y usa web components (`lit`) — pelea real. Ant Design X te mete el design system de Ant entero — descarte inmediato dado "Spectra".
+By comparison: CopilotKit injects its own CSS and uses web components (`lit`) — a real fight. Ant Design X brings in the whole Ant design system — ruled out immediately given "Spectra".
 
 ---
 
-## 4. Snippets reales de la opción recomendada
+## 4. Real snippets from the recommended option
 
-### 4.1 Backend Node (Claude Agent SDK) → protocolo AI SDK UI Message Stream
+### 4.1 Node backend (Claude Agent SDK) → AI SDK UI Message Stream protocol
 
-Formato verificado en `ai-sdk.dev/docs/ai-sdk-ui/stream-protocol` ✅. Todos los eventos van como `data: {JSON}\n\n` y el stream cierra con `data: [DONE]\n\n`.
+Format verified at `ai-sdk.dev/docs/ai-sdk-ui/stream-protocol` ✅. Every event goes as `data: {JSON}\n\n` and the stream closes with `data: [DONE]\n\n`.
 
 ```js
 // server/routes/chat.js  (Express)
@@ -161,7 +166,7 @@ app.post("/api/chat", async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
-  res.setHeader("x-vercel-ai-ui-message-stream", "v1"); // <-- OBLIGATORIA
+  res.setHeader("x-vercel-ai-ui-message-stream", "v1"); // <-- REQUIRED
 
   const send = (o) => res.write(`data: ${JSON.stringify(o)}\n\n`);
   const messageId = "msg_" + Date.now();
@@ -169,7 +174,7 @@ app.post("/api/chat", async (req, res) => {
   send({ type: "start", messageId });
   send({ type: "start-step" });
 
-  // ---- Puente: eventos del Claude Agent SDK -> eventos del protocolo ----
+  // ---- Bridge: Claude Agent SDK events -> protocol events ----
   for await (const ev of runClaudeAgent({ messages, signal: req.signal })) {
     if (ev.kind === "text_start") {
       send({ type: "text-start", id: ev.id });
@@ -182,7 +187,7 @@ app.post("/api/chat", async (req, res) => {
     } else if (ev.kind === "tool_start") {
       send({ type: "tool-input-start", toolCallId: ev.id, toolName: ev.name });
     } else if (ev.kind === "tool_input") {
-      // args completos -> aquí es donde se dispara nuestro componente React
+      // full args -> this is where our React component gets triggered
       send({ type: "tool-input-available", toolCallId: ev.id, toolName: ev.name, input: ev.input });
     } else if (ev.kind === "tool_result") {
       send({ type: "tool-output-available", toolCallId: ev.id, output: ev.output });
@@ -196,12 +201,12 @@ app.post("/api/chat", async (req, res) => {
 });
 ```
 
-**Catálogo de eventos disponible** (verbatim de la doc) ✅:
+**Available event catalog** (verbatim from the docs) ✅:
 `start`, `start-step`, `finish-step`, `finish`, `text-start|delta|end`, `reasoning-start|delta|end`, `source-url`, `source-document`, `file`, `data-*` (custom), `tool-input-start`, `tool-input-delta`, `tool-input-available`, `tool-output-available`, `tool-output-denied`, **`tool-approval-request`**, **`tool-approval-response`**, `abort`, `error`.
 
-> ⚠️ **Cuidado con nginx.** Ya nos mordió en tu empresa con las fotos. Para SSE hace falta `proxy_buffering off;` y `proxy_read_timeout` alto en la location del endpoint, o el stream llega a golpes o se corta.
+> ⚠️ **Watch out for nginx.** It already bit us with photo uploads on the main website. SSE needs `proxy_buffering off;` and a high `proxy_read_timeout` on the endpoint's location, or the stream arrives in bursts or gets cut.
 
-### 4.2 Cliente — conectar el runtime a NUESTRO endpoint
+### 4.2 Client — connect the runtime to OUR endpoint
 
 ```tsx
 "use client";
@@ -213,7 +218,7 @@ export function ApmChat() {
   const runtime = useChatRuntime({
     transport: new AssistantChatTransport({
       api: "/api/chat",
-      headers: () => ({ Authorization: `Bearer ${getToken()}` }), // patrón verificado en la doc de transport
+      headers: () => ({ Authorization: `Bearer ${getToken()}` }), // pattern verified in the transport docs
     }),
   });
 
@@ -225,9 +230,9 @@ export function ApmChat() {
 }
 ```
 
-### 4.3 Generative UI — un componente React por tool
+### 4.3 Generative UI — one React component per tool
 
-Código **verbatim del repo oficial** (`examples/with-generative-ui/components/location-tool-ui.tsx`) ✅, recortado:
+Code **verbatim from the official repo** (`examples/with-generative-ui/components/location-tool-ui.tsx`) ✅, trimmed:
 
 ```tsx
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
@@ -237,9 +242,9 @@ type LocationResult = { success: boolean };
 
 export const LocationToolUI: ToolCallMessagePartComponent<LocationArgs, LocationResult> =
   function LocationUI({ args, status }) {
-    // los args llegan en streaming: pinta un placeholder mientras tanto
+    // args arrive streaming: draw a placeholder in the meantime
     if (status.type === "running" && (args.lat == null || args.lng == null)) {
-      return <div className="flex items-center gap-2 rounded-lg border p-4">Cargando…</div>;
+      return <div className="flex items-center gap-2 rounded-lg border p-4">Loading…</div>;
     }
     const { name, address, lat, lng } = args;
     if (lat == null || lng == null) return null;
@@ -252,7 +257,7 @@ export const LocationToolUI: ToolCallMessagePartComponent<LocationArgs, Location
   };
 ```
 
-Registro (verbatim de `examples/with-generative-ui/app/page.tsx` ✅):
+Registration (verbatim from `examples/with-generative-ui/app/page.tsx` ✅):
 
 ```tsx
 import { AssistantRuntimeProvider, Tools, useAui } from "@assistant-ui/react";
@@ -261,14 +266,14 @@ import toolkit from "./toolkit";
 const aui = useAui({ tools: Tools({ toolkit }) });
 ```
 
-Y el toolkit (verbatim de `app/toolkit.tsx` ✅):
+And the toolkit (verbatim from `app/toolkit.tsx` ✅):
 
 ```tsx
 import { defineToolkit, externalTool, humanTool } from "@assistant-ui/react";
 import { z } from "zod";
 
 export default defineToolkit({
-  // La tool YA existe en nuestro backend: solo registramos cómo se pinta.
+  // The tool ALREADY exists in our backend: we only register how it's drawn.
   show_location: {
     execute: externalTool(),
     render: LocationToolUI,
@@ -282,11 +287,11 @@ export default defineToolkit({
 });
 ```
 
-> **`externalTool()` es la clave para APM.** Significa: "esta herramienta ya está definida y se ejecuta en otro sitio (nuestro backend / MCP), aquí solo declaro su render". No duplicamos el schema ni el executor. ✅
+> **`externalTool()` is the key for APM.** It means: "this tool is already defined and runs elsewhere (our backend / MCP); here I only declare its render". We don't duplicate the schema or the executor. ✅
 
-### 4.4 Aprobación human-in-the-loop
+### 4.4 Human-in-the-loop approval
 
-**Camino A — recomendado para APM (`humanTool()` + `addResult`).** Verbatim de `docs/tools/defining-tools` ✅:
+**Path A — recommended for APM (`humanTool()` + `addResult`).** Verbatim from `docs/tools/defining-tools` ✅:
 
 ```tsx
 import { defineToolkit, humanTool } from "@assistant-ui/react";
@@ -296,19 +301,19 @@ export default defineToolkit({
   confirm_deploy: {
     description: "Ask the operator to approve a deployment before it runs.",
     parameters: z.object({ target: z.string(), summary: z.string() }),
-    execute: humanTool(),          // pausa hasta que el usuario responda
+    execute: humanTool(),          // pauses until the user responds
     render: ({ args, result, addResult }) => {
       if (result) {
-        return <p>{result.approved ? "Aprobado" : `Rechazado: ${result.reason}`}</p>;
+        return <p>{result.approved ? "Approved" : `Rejected: ${result.reason}`}</p>;
       }
       return (
         <div className="rounded-lg border border-[--spectra-accent] p-4">
-          <p className="font-medium">¿Desplegar a {args.target}?</p>
+          <p className="font-medium">Deploy to {args.target}?</p>
           <p className="text-muted-foreground text-sm">{args.summary}</p>
           <div className="mt-3 flex gap-2">
-            <button onClick={() => addResult({ approved: true })}>Aprobar</button>
+            <button onClick={() => addResult({ approved: true })}>Approve</button>
             <button onClick={() => addResult({ approved: false, reason: "user denied" })}>
-              Rechazar
+              Reject
             </button>
           </div>
         </div>
@@ -318,9 +323,9 @@ export default defineToolkit({
 });
 ```
 
-El contrato: **`render` debe llamar a `addResult` exactamente una vez** ✅. El resultado viaja al backend como un tool result normal — nuestro agente Claude lo lee y decide. Cero cambios de protocolo.
+The contract: **`render` must call `addResult` exactly once** ✅. The result travels to the backend as a normal tool result — our Claude agent reads it and decides. Zero protocol changes.
 
-**Camino B — protocolo nativo de aprobación.** Verbatim de `docs/tools/tool-ui` ✅:
+**Path B — the native approval protocol.** Verbatim from `docs/tools/tool-ui` ✅:
 
 ```tsx
 const toolkit = defineToolkit({
@@ -348,99 +353,99 @@ const toolkit = defineToolkit({
 });
 ```
 
-Requiere que el backend emita `{"type":"tool-approval-request","toolCallId":"...","approvalId":"..."}` y sepa reanudar al recibir la respuesta. **Solo funciona con runtimes que lo implementen** (AI SDK v6/v7 runtime o LocalRuntime); ver §5.
+It requires the backend to emit `{"type":"tool-approval-request","toolCallId":"...","approvalId":"..."}` and know how to resume when the answer arrives. **It only works with runtimes that implement it** (the AI SDK v6/v7 runtime or LocalRuntime); see §5.
 
 ---
 
-## 5. ⚠️ Correcciones a supuestos del proyecto
+## 5. ⚠️ Corrections to project assumptions
 
-**① El AI SDK va por la v7, no la v5.** `ai@latest` = **7.0.48** (1-ago-2026) ✅. Vercel mantiene tags paralelos: `ai-v5` (5.0.225) y `ai-v6` (6.0.240). Cualquier tutorial de "AI SDK 5 / `DefaultChatTransport`" que encuentres puede estar dos majors atrasado. `@assistant-ui/react-ai-sdk@1.4.2` depende de **`ai@^7.0.37`** ✅ — así que si vamos por assistant-ui, entramos directamente en v7.
+**① The AI SDK is on v7, not v5.** `ai@latest` = **7.0.48** (1-Aug-2026) ✅. Vercel keeps parallel tags: `ai-v5` (5.0.225) and `ai-v6` (6.0.240). Any "AI SDK 5 / `DefaultChatTransport`" tutorial you find may be two majors behind. `@assistant-ui/react-ai-sdk@1.4.2` depends on **`ai@^7.0.37`** ✅ — so going with assistant-ui means going straight to v7.
 
-**② "Usar AI SDK en el cliente" NO implica usarlo como runtime del agente.** Este es el malentendido más caro de deshacer. `ai` + `@ai-sdk/react` en el navegador son **solo un parser de SSE y una máquina de estados de mensajes**. El agente sigue corriendo 100 % en nuestro Node con Claude Agent SDK. Lo único que compartimos con Vercel es un **formato de texto sobre el cable**, que está documentado y que emitimos con `res.write()`. Cero lock-in, cero servicio de pago.
+**② "Using the AI SDK on the client" does NOT mean using it as the agent runtime.** This is the most expensive misunderstanding to undo. `ai` + `@ai-sdk/react` in the browser are **just an SSE parser and a message state machine**. The agent still runs 100% in our Node with the Claude Agent SDK. All we share with Vercel is a **text format on the wire**, which is documented and which we emit with `res.write()`. Zero lock-in, zero paid service.
 
-**③ ⚠️ `useDataStreamRuntime` NO soporta human-in-the-loop.** Es el atajo más obvio (`useDataStreamRuntime({ api: "/api/chat" })`) y **es una trampa para nosotros**. La doc lo dice explícitamente: *"Human-in-the-loop tools (`unstable_humanToolNames`, `human()` interrupts) are not supported in the data stream runtime"* ✅. Como HITL es no negociable, **hay que usar `useChatRuntime` (AI SDK v7) o `useLocalRuntime`**. Que quede escrito en el plan de implementación.
+**③ ⚠️ `useDataStreamRuntime` does NOT support human-in-the-loop.** It's the most obvious shortcut (`useDataStreamRuntime({ api: "/api/chat" })`) and **it's a trap for us**. The docs say so explicitly: *"Human-in-the-loop tools (`unstable_humanToolNames`, `human()` interrupts) are not supported in the data stream runtime"* ✅. Since HITL is non-negotiable, **you must use `useChatRuntime` (AI SDK v7) or `useLocalRuntime`**. That has to be written into the implementation plan.
 
-**④ El directivo `"use generative"` SÍ requiere Next.js.** Es lo único de assistant-ui que lo requiere. Ese modo mágico (colocar schema + `execute` de servidor + `render` de cliente en un solo archivo) lo implementa el paquete `@assistant-ui/next` con el wrapper `withAui()` ✅. **Pero no lo necesitamos**: nuestras tools se ejecutan en nuestro backend Node, así que usamos la forma cliente de `defineToolkit` con `externalTool()`, que funciona en Vite igual. Verificado: el ejemplo oficial `examples/with-react-router` corre sobre **Vite 8 + React Router 8, sin Next** ✅.
+**④ The `"use generative"` directive DOES require Next.js.** It's the only part of assistant-ui that does. That magic mode (colocating schema + server `execute` + client `render` in one file) is implemented by the `@assistant-ui/next` package with the `withAui()` wrapper ✅. **But we don't need it**: our tools run in our Node backend, so we use the client form of `defineToolkit` with `externalTool()`, which works the same in Vite. Verified: the official `examples/with-react-router` example runs on **Vite 8 + React Router 8, no Next** ✅.
 
-**⑤ CopilotKit no es "una librería de UI con más estrellas".** Sus 36k ★ son de un *framework de agentes* completo. Consumir nuestro backend implica implementar el protocolo **AG-UI**, no un SSE cualquiera. Es exactamente el acoplamiento que el brief pide evitar.
+**⑤ CopilotKit isn't "a UI library with more stars".** Its 36k ★ are for a full *agent framework*. Consuming our backend means implementing the **AG-UI** protocol, not just any SSE. It's exactly the coupling the brief asks to avoid.
 
-**⑥ Tambo (11k ★) queda fuera por arquitectura, no por calidad.** *"Self-host the backend or use Tambo Cloud"* ✅ — pero ese backend es **el suyo**, con su propio bucle de agente. Tendríamos dos agentes compitiendo. Descartado.
+**⑥ Tambo (11k ★) is out because of its architecture, not its quality.** *"Self-host the backend or use Tambo Cloud"* ✅ — but that backend is **theirs**, with its own agent loop. We'd have two agents competing. Ruled out.
 
 ---
 
-## 6. Las 2 razones principales para descartar cada alternativa
+## 6. The 2 main reasons to rule out each alternative
 
-**AI Elements + AI SDK a secas** (2º clasificado, y es nuestro Plan B):
-1. Es un **kit de piezas, no un hilo de chat**. No trae branching, edición de mensajes, regeneración, lista de hilos ni auto-scroll pegajoso: todo eso lo escribimos y mantenemos nosotros. assistant-ui lo regala.
-2. El registro de generative UI es **manual**: un `switch` sobre `part.type` en cada render, sin tipado extremo a extremo por tool. Con 10-15 tools se pudre rápido.
+**AI Elements + plain AI SDK** (runner-up, and our Plan B):
+1. It's a **kit of pieces, not a chat thread**. No branching, message editing, regeneration, thread list or sticky auto-scroll: we'd write and maintain all of that. assistant-ui gives it for free.
+2. Generative UI registration is **manual**: a `switch` on `part.type` in every render, with no end-to-end typing per tool. With 10-15 tools it rots fast.
 
 **CopilotKit:**
-1. **Impone AG-UI** como protocolo. Nuestro backend tendría que hablarlo, que es justo lo contrario de "que la UI consuma NUESTRO stream".
-2. **Peso y contaminación**: 29 dependencias directas incluyendo `lit`, `rxjs`, `katex` y `@jetbrains/websandbox`, más CSS y web components propios que pelean con Spectra.
+1. **It imposes AG-UI** as the protocol. Our backend would have to speak it, which is exactly the opposite of "the UI consumes OUR stream".
+2. **Weight and pollution**: 29 direct dependencies including `lit`, `rxjs`, `katex` and `@jetbrains/websandbox`, plus its own CSS and web components that fight with Spectra.
 
 **Tambo:**
-1. **Impone su servidor de agente** — incompatible con Claude Agent SDK en nuestro Node.
-2. HITL no documentado ⚠️.
+1. **It imposes its agent server** — incompatible with the Claude Agent SDK in our Node.
+2. HITL not documented ⚠️.
 
 **OpenUI / thesys:**
-1. **Paradigma opuesto**: el modelo genera la UI mediante un DSL; nosotros queremos que invoque nuestros componentes React tipados.
-2. No aporta el hilo de chat.
+1. **The opposite paradigm**: the model generates the UI through a DSL; we want it to invoke our typed React components.
+2. It doesn't provide the chat thread.
 
 **Ant Design X / Deep Chat / shadcn-chatbot-kit:**
-1. **Ninguno tiene aprobación HITL** — requisito no negociable. Fin del análisis.
-2. Ant Design X además arrastra el design system de Ant (mata Spectra) y shadcn-chatbot-kit lleva parado desde febrero de 2026.
+1. **None has HITL approval** — a non-negotiable requirement. End of analysis.
+2. Ant Design X also drags in Ant's design system (kills Spectra), and shadcn-chatbot-kit has been stalled since February 2026.
 
 ---
 
-## 7. Plan B (si assistant-ui resulta demasiado acoplado)
+## 7. Plan B (if assistant-ui turns out too coupled)
 
-**La buena noticia: el Plan B no tira nada del backend.**
+**The good news: Plan B throws away nothing in the backend.**
 
-Como la recomendación es que nuestro Node emita el **protocolo AI SDK UI Message Stream**, y `assistant-ui/react-ai-sdk` es una capa fina *sobre* `@ai-sdk/react`, salirse cuesta poco:
+Since the recommendation is for our Node to emit the **AI SDK UI Message Stream protocol**, and `assistant-ui/react-ai-sdk` is a thin layer *over* `@ai-sdk/react`, getting out is cheap:
 
-1. **Quitas** `@assistant-ui/react` + `@assistant-ui/react-ai-sdk`.
-2. **Te quedas** con `useChat` de `@ai-sdk/react` apuntando al **mismo endpoint sin cambios**.
-3. **Instalas AI Elements** (`Conversation`, `Message`, `PromptInput`, `Response`, `Tool`…) que es shadcn puro, así que tus tokens Spectra siguen valiendo.
-4. La aprobación HITL sigue disponible de forma nativa: `addToolApprovalResponse({ id: part.approval.id, approved: true })` + `sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses` ✅.
-5. Lo que pierdes y hay que reescribir: branching, edición de mensajes, regeneración, lista de hilos, auto-scroll y los renders por tool.
+1. **Remove** `@assistant-ui/react` + `@assistant-ui/react-ai-sdk`.
+2. **Keep** `useChat` from `@ai-sdk/react` pointing at the **same endpoint, unchanged**.
+3. **Install AI Elements** (`Conversation`, `Message`, `PromptInput`, `Response`, `Tool`…), which is pure shadcn, so your Spectra tokens still apply.
+4. HITL approval stays natively available: `addToolApprovalResponse({ id: part.approval.id, approved: true })` + `sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses` ✅.
+5. What you lose and have to rewrite: branching, message editing, regeneration, thread list, auto-scroll and the per-tool renders.
 
-**Plan C (escotilla de emergencia, coste cero de dependencias):** `useLocalRuntime` con un `ChatModelAdapter.run` declarado como `async *` generator, parseando nuestro SSE con `eventsource-parser` — exactamente lo que hace el ejemplo oficial `with-react-router` ✅ (`eventsource-parser` está en su `package.json`). Con esto el formato del cable pasa a ser **nuestro**, sin ninguna convención de Vercel. Regla del adaptador: **hay que hacer `yield` del estado acumulado completo, no de deltas** ✅.
+**Plan C (emergency hatch, zero dependency cost):** `useLocalRuntime` with a `ChatModelAdapter.run` declared as an `async *` generator, parsing our SSE with `eventsource-parser` — exactly what the official `with-react-router` example does ✅ (`eventsource-parser` is in its `package.json`). With this the wire format becomes **ours**, with no Vercel convention at all. The adapter's rule: **you must `yield` the full accumulated state, not deltas** ✅.
 
 ---
 
-## 8. Decisión Vite vs Next.js (lo que exige cada librería)
+## 8. Vite vs Next.js decision (what each library requires)
 
 | | Vite SPA | Next.js |
 |---|---|---|
-| assistant-ui (forma cliente + `externalTool()`) | ✅ Funciona (ejemplo oficial con Vite 8) | ✅ |
-| assistant-ui con `"use generative"` | ❌ Requiere `@assistant-ui/next` | ✅ |
+| assistant-ui (client form + `externalTool()`) | ✅ Works (official example with Vite 8) | ✅ |
+| assistant-ui with `"use generative"` | ❌ Requires `@assistant-ui/next` | ✅ |
 | AI SDK `useChat` + transport | ✅ | ✅ |
-| AI Elements | ✅ (necesita Tailwind + shadcn) | ✅ |
+| AI Elements | ✅ (needs Tailwind + shadcn) | ✅ |
 
-**Recomendación: Vite SPA.** Como el backend es Node propio y separado, las API routes de Next no aportan nada, y `"use generative"` es azúcar que no necesitamos (nuestras tools ya viven en el backend). Vite da builds más rápidos y un despliegue estático trivial detrás del nginx que ya tenemos. Si más adelante hiciera falta SSR/SEO, migrar el chat es un copy-paste — es un componente cliente en ambos casos.
-
----
-
-## 9. Qué queda sin verificar
-
-- El nombre exacto de la API de HITL en CopilotKit v1.64 (`renderAndWaitForResponse`) — no confirmado contra la doc de esa versión.
-- Soporte de aprobaciones en `useAssistantTransportRuntime`.
-- Qué campos extra mete `AssistantChatTransport` en el body respecto a `DefaultChatTransport` (presumiblemente definiciones de frontend tools y el system prompt) — **conviene loguear un request real antes de fijar el contrato del backend**.
-- Capacidades de HITL en Tambo y OpenUI.
-- Los pesos de bundlephobia son del paquete entero sin tree-shaking; el coste real en producción será menor.
+**Recommendation: Vite SPA.** Since the backend is our own, separate Node, Next's API routes add nothing, and `"use generative"` is sugar we don't need (our tools already live in the backend). Vite gives faster builds and a trivial static deployment behind the nginx we already have. If SSR/SEO were ever needed, moving the chat is a copy-paste — it's a client component either way.
 
 ---
 
-## Fuentes
+## 9. What remains unverified
+
+- The exact name of CopilotKit v1.64's HITL API (`renderAndWaitForResponse`) — not confirmed against that version's docs.
+- Approval support in `useAssistantTransportRuntime`.
+- Which extra fields `AssistantChatTransport` puts in the body compared to `DefaultChatTransport` (presumably frontend tool definitions and the system prompt) — **log a real request before fixing the backend contract**.
+- HITL capabilities in Tambo and OpenUI.
+- Bundlephobia weights are for the whole package without tree-shaking; the real production cost will be lower.
+
+---
+
+## Sources
 
 - [assistant-ui — Custom Runtime overview](https://www.assistant-ui.com/docs/runtimes/custom/overview)
 - [assistant-ui — Data Stream Protocol](https://www.assistant-ui.com/docs/runtimes/custom/data-stream)
 - [assistant-ui — Assistant Transport](https://www.assistant-ui.com/docs/runtimes/custom/assistant-transport)
 - [assistant-ui — AI SDK v7 runtime](https://www.assistant-ui.com/docs/runtimes/ai-sdk/v7)
 - [assistant-ui — Tool UI](https://www.assistant-ui.com/docs/tools/tool-ui) · [Defining Tools](https://www.assistant-ui.com/docs/tools/defining-tools) · [Installation](https://www.assistant-ui.com/docs/installation)
-- [assistant-ui en GitHub](https://github.com/assistant-ui/assistant-ui) (ejemplos `with-generative-ui`, `with-ai-sdk-v7`, `with-react-router`)
+- [assistant-ui on GitHub](https://github.com/assistant-ui/assistant-ui) (examples `with-generative-ui`, `with-ai-sdk-v7`, `with-react-router`)
 - [AI SDK — UI Message Stream Protocol](https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol) · [Transport](https://ai-sdk.dev/docs/ai-sdk-ui/transport) · [Tool Approvals](https://ai-sdk.dev/docs/agents/tool-approvals)
 - [AI Elements](https://elements.ai-sdk.dev/overview)
-- [CopilotKit docs](https://docs.copilotkit.ai/) · [CopilotKit en GitHub](https://github.com/CopilotKit/CopilotKit)
+- [CopilotKit docs](https://docs.copilotkit.ai/) · [CopilotKit on GitHub](https://github.com/CopilotKit/CopilotKit)
 - [Tambo docs](https://docs.tambo.co/) · [OpenUI](https://github.com/thesysdev/openui) · [Deep Chat](https://deepchat.dev/docs/introduction) · [AG-UI](https://github.com/ag-ui-protocol/ag-ui)
-- npm registry API y GitHub API (versiones, licencias, fechas, estrellas) — consultadas el 2-ago-2026
+- npm registry API and GitHub API (versions, licenses, dates, stars) — checked on 2-Aug-2026

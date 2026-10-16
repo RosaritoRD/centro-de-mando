@@ -1,41 +1,41 @@
-# Categoría A — Núcleo de agentes: Claude Agent SDK (TypeScript)
+# Category A — Agent core: Claude Agent SDK (TypeScript)
 
-**Investigación verificada el 2026-08-02.** Todo lo que aparece aquí fue comprobado por descarga directa de la documentación oficial (`.md` crudo, no resumen) y de las APIs de GitHub y npm. Lo que no pude verificar está marcado explícitamente como **NO VERIFICADO**.
+**Research verified on 2026-08-02.** Everything here was checked by downloading the official documentation directly (raw `.md`, not a summary) and the GitHub and npm APIs. Anything I couldn't verify is explicitly marked **NOT VERIFIED**.
 
-> ⚠️ **Cambio de dominio importante:** `https://platform.claude.com/docs/en/agent-sdk/*` responde **307 Temporary Redirect** hacia `https://code.claude.com/docs/en/agent-sdk/*`. La documentación del Agent SDK ya **no** vive en `platform.claude.com`. Cualquier enlace guardado con el dominio viejo hay que actualizarlo.
+> ⚠️ **Important domain change:** `https://platform.claude.com/docs/en/agent-sdk/*` answers **307 Temporary Redirect** to `https://code.claude.com/docs/en/agent-sdk/*`. The Agent SDK docs **no longer** live on `platform.claude.com`. Any link saved with the old domain needs updating.
 
 ---
 
-## 1. Tabla de fuentes
+## 1. Sources
 
-| Fuente | URL | Fecha / versión verificada | Qué confirma |
+| Source | URL | Date / version verified | What it confirms |
 |---|---|---|---|
-| Agent SDK overview | https://code.claude.com/docs/en/agent-sdk/overview | consultada 2026-08-02 | Qué es el SDK, licencia comercial, prohibición de login claude.ai para terceros |
-| Referencia TypeScript | https://code.claude.com/docs/en/agent-sdk/typescript.md | consultada 2026-08-02 (265 KB de markdown) | Tipos exactos: `Options`, `AgentDefinition`, `CanUseTool`, `PermissionResult`, `SDKResultMessage`, `HookEvent`, `createSdkMcpServer`, `tool()` |
-| Subagents in the SDK | https://code.claude.com/docs/en/agent-sdk/subagents.md | consultada 2026-08-02 | Aislamiento de contexto, qué hereda un subagente, modelo por subagente, resume de subagentes |
-| Configure permissions | https://code.claude.com/docs/en/agent-sdk/permissions.md | consultada 2026-08-02 | Orden de evaluación de permisos (6 pasos), modos |
-| Handle approvals and user input | https://code.claude.com/docs/en/agent-sdk/user-input.md | consultada 2026-08-02 | `canUseTool` puede quedar pendiente **indefinidamente**; alternativa `defer` |
-| Hooks (SDK) | https://code.claude.com/docs/en/agent-sdk/hooks.md | consultada 2026-08-02 | Tabla de 31 eventos, matchers, timeouts por evento |
-| Hooks (Claude Code, sección defer) | https://code.claude.com/docs/en/hooks.md | consultada 2026-08-02 | Round-trip completo de `permissionDecision: "defer"` |
-| Work with sessions | https://code.claude.com/docs/en/agent-sdk/sessions.md | consultada 2026-08-02 | Captura de `session_id`, `resume`, `forkSession` |
-| Persist sessions to external storage | https://code.claude.com/docs/en/agent-sdk/session-storage.md | consultada 2026-08-02 | Interfaz `SessionStore` (S3/Redis/Postgres) — **clave para multi-usuario** |
-| Hosting the Agent SDK | https://code.claude.com/docs/en/agent-sdk/hosting.md | consultada 2026-08-02 | Modelo de subproceso, Dockerfile, RAM/CPU, aislamiento multi-tenant |
-| Securely deploying AI agents | https://code.claude.com/docs/en/agent-sdk/secure-deployment.md | consultada 2026-08-02 | Flags de `docker run` endurecidas, patrón proxy de credenciales |
-| Track cost and usage | https://code.claude.com/docs/en/agent-sdk/cost-tracking.md | consultada 2026-08-02 | `total_cost_usd`, `usage`, `modelUsage`, deduplicación por `message.id` |
-| Give Claude custom tools | https://code.claude.com/docs/en/agent-sdk/custom-tools.md | consultada 2026-08-02 | `tool()` + `createSdkMcpServer()` in-process |
-| Quickstart (auth) | https://code.claude.com/docs/en/agent-sdk/quickstart.md | consultada 2026-08-02 | Node 18+, `ANTHROPIC_API_KEY`, binario CLI incluido |
-| npm registry | https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk | **v0.3.220**, publicada **2026-07-24T23:11:19Z** | Versión, engines, peerDeps, binarios opcionales por plataforma |
-| GitHub API — SDK TS | https://api.github.com/repos/anthropics/claude-agent-sdk-typescript | push **2026-07-25**, 1 668 ★, 176 issues abiertas, no archivado | Mantenido activamente (releases casi diarias) |
-| GitHub API — demos | https://api.github.com/repos/anthropics/claude-agent-sdk-demos | push **2026-03-13**, 2 698 ★, 33 issues, no archivado | **Demos desactualizadas ~5 meses** frente al SDK |
-| README del repo TS | https://raw.githubusercontent.com/anthropics/claude-agent-sdk-typescript/main/README.md | consultado 2026-08-02 | Licencia = Anthropic Commercial ToS, **no OSS** |
+| Agent SDK overview | https://code.claude.com/docs/en/agent-sdk/overview | checked 2026-08-02 | What the SDK is, the commercial license, the ban on claude.ai login for third parties |
+| TypeScript reference | https://code.claude.com/docs/en/agent-sdk/typescript.md | checked 2026-08-02 (265 KB of markdown) | Exact types: `Options`, `AgentDefinition`, `CanUseTool`, `PermissionResult`, `SDKResultMessage`, `HookEvent`, `createSdkMcpServer`, `tool()` |
+| Subagents in the SDK | https://code.claude.com/docs/en/agent-sdk/subagents.md | checked 2026-08-02 | Context isolation, what a subagent inherits, per-subagent model, resuming subagents |
+| Configure permissions | https://code.claude.com/docs/en/agent-sdk/permissions.md | checked 2026-08-02 | Permission evaluation order (6 steps), modes |
+| Handle approvals and user input | https://code.claude.com/docs/en/agent-sdk/user-input.md | checked 2026-08-02 | `canUseTool` can stay pending **indefinitely**; the `defer` alternative |
+| Hooks (SDK) | https://code.claude.com/docs/en/agent-sdk/hooks.md | checked 2026-08-02 | Table of 31 events, matchers, per-event timeouts |
+| Hooks (Claude Code, defer section) | https://code.claude.com/docs/en/hooks.md | checked 2026-08-02 | The full `permissionDecision: "defer"` round-trip |
+| Work with sessions | https://code.claude.com/docs/en/agent-sdk/sessions.md | checked 2026-08-02 | Capturing `session_id`, `resume`, `forkSession` |
+| Persist sessions to external storage | https://code.claude.com/docs/en/agent-sdk/session-storage.md | checked 2026-08-02 | The `SessionStore` interface (S3/Redis/Postgres) — **key for multi-user** |
+| Hosting the Agent SDK | https://code.claude.com/docs/en/agent-sdk/hosting.md | checked 2026-08-02 | Subprocess model, Dockerfile, RAM/CPU, multi-tenant isolation |
+| Securely deploying AI agents | https://code.claude.com/docs/en/agent-sdk/secure-deployment.md | checked 2026-08-02 | Hardened `docker run` flags, credential-proxy pattern |
+| Track cost and usage | https://code.claude.com/docs/en/agent-sdk/cost-tracking.md | checked 2026-08-02 | `total_cost_usd`, `usage`, `modelUsage`, dedup by `message.id` |
+| Give Claude custom tools | https://code.claude.com/docs/en/agent-sdk/custom-tools.md | checked 2026-08-02 | In-process `tool()` + `createSdkMcpServer()` |
+| Quickstart (auth) | https://code.claude.com/docs/en/agent-sdk/quickstart.md | checked 2026-08-02 | Node 18+, `ANTHROPIC_API_KEY`, bundled CLI binary |
+| npm registry | https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk | **v0.3.220**, published **2026-07-24T23:11:19Z** | Version, engines, peerDeps, optional per-platform binaries |
+| GitHub API — TS SDK | https://api.github.com/repos/anthropics/claude-agent-sdk-typescript | push **2026-07-25**, 1,668 ★, 176 open issues, not archived | Actively maintained (near-daily releases) |
+| GitHub API — demos | https://api.github.com/repos/anthropics/claude-agent-sdk-demos | push **2026-03-13**, 2,698 ★, 33 issues, not archived | **Demos ~5 months behind** the SDK |
+| TS repo README | https://raw.githubusercontent.com/anthropics/claude-agent-sdk-typescript/main/README.md | checked 2026-08-02 | License = Anthropic Commercial ToS, **not OSS** |
 
-**Cadencia de publicación npm verificada** (últimas 5): 0.3.216 (2026-07-20), 0.3.217 (07-21), 0.3.218 (07-22), 0.3.219 (07-24), 0.3.220 (07-24). Es decir, **release casi diaria**. Los últimos commits del repo son todos `chore: Update CHANGELOG.md` — el código fuente real **no** está en ese repo (`language: Shell`); es un repo de distribución/changelog/issues.
+**Verified npm publishing cadence** (last 5): 0.3.216 (2026-07-20), 0.3.217 (07-21), 0.3.218 (07-22), 0.3.219 (07-24), 0.3.220 (07-24). That is, **near-daily releases**. The repo's latest commits are all `chore: Update CHANGELOG.md` — the real source code is **not** in that repo (`language: Shell`); it's a distribution/changelog/issues repo.
 
 ---
 
-## 2. `AgentDefinition`: campos exactos
+## 2. `AgentDefinition`: exact fields
 
-Copiado literal de https://code.claude.com/docs/en/agent-sdk/typescript.md (sección `### AgentDefinition`):
+Copied verbatim from https://code.claude.com/docs/en/agent-sdk/typescript.md (section `### AgentDefinition`):
 
 ```typescript
 type AgentDefinition = {
@@ -56,9 +56,9 @@ type AgentDefinition = {
 };
 ```
 
-Solo **`description` y `prompt` son obligatorios**. No existe campo `systemPrompt` ni `instructions` dentro de `AgentDefinition` (el prompt del sistema del subagente **es** el campo `prompt`).
+Only **`description` and `prompt` are required**. There's no `systemPrompt` or `instructions` field inside `AgentDefinition` (the subagent's system prompt **is** the `prompt` field).
 
-Snippet real de uso, copiado de https://code.claude.com/docs/en/agent-sdk/subagents.md:
+A real usage snippet, copied from https://code.claude.com/docs/en/agent-sdk/subagents.md:
 
 ```typescript
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -108,49 +108,49 @@ Focus on:
 }
 ```
 
-**Detalle operativo crítico:** hay que incluir **`"Agent"`** en `allowedTools` o las invocaciones de subagentes caen en `canUseTool` (o se deniegan en modo `dontAsk`). Documentado en la sección "Troubleshooting → Claude not delegating to subagents".
+**Critical operational detail:** you must include **`"Agent"`** in `allowedTools`, or subagent invocations fall into `canUseTool` (or get denied in `dontAsk` mode). Documented in "Troubleshooting → Claude not delegating to subagents". (In APM's code the tool is *declared* as `Task` — see the comment in `api/agent.js`.)
 
-También se pueden definir subagentes como archivos markdown en `.claude/agents/`. Los definidos programáticamente **tienen prioridad** sobre los de disco con el mismo nombre.
+Subagents can also be defined as markdown files in `.claude/agents/`. Programmatically defined ones **take precedence** over on-disk ones with the same name.
 
 ---
 
-## 3. Aislamiento de contexto por subagente
+## 3. Per-subagent context isolation
 
-Cita literal (subagents.md → "Context isolation"):
+Verbatim quote (subagents.md → "Context isolation"):
 
 > Each subagent runs in its own fresh conversation. Intermediate tool calls and results stay inside the subagent; only its final message returns to the parent.
 
-Y la tabla exacta de qué hereda (subagents.md → "What subagents inherit"):
+And the exact table of what it inherits (subagents.md → "What subagents inherit"):
 
-| El subagente **recibe** | El subagente **NO recibe** |
+| The subagent **gets** | The subagent does **NOT** get |
 |---|---|
-| Su propio system prompt (`AgentDefinition.prompt`) y el prompt de la herramienta `Agent` | El historial de conversación ni los resultados de herramientas del padre |
-| El CLAUDE.md del proyecto (cargado vía `settingSources`) | Contenido de skills precargadas, salvo que se listen en `AgentDefinition.skills` |
-| Definiciones de herramientas (heredadas del padre o el subconjunto de `tools`) | El system prompt del padre |
+| Its own system prompt (`AgentDefinition.prompt`) and the `Agent` tool's prompt | The parent's conversation history or tool results |
+| The project's CLAUDE.md (loaded via `settingSources`) | Preloaded skill content, unless listed in `AgentDefinition.skills` |
+| Tool definitions (inherited from the parent or the `tools` subset) | The parent's system prompt |
 
 > "A subagent's context window starts fresh, with no parent conversation, but isn't empty. The only content you pass from parent to subagent is the Agent tool's prompt string, so include any file paths, error messages, or decisions the subagent needs directly in that prompt."
 
-**Respuesta directa:** NO comparte historial con el orquestador. El único canal padre→hijo es el string del prompt de la llamada a `Agent`; el único canal hijo→padre es el mensaje final del subagente (que el padre puede resumir).
+**Direct answer:** it does NOT share history with the orchestrator. The only parent→child channel is the `Agent` call's prompt string; the only child→parent channel is the subagent's final message (which the parent can summarize).
 
-Consecuencias verificadas que afectan al diseño de APM:
+Verified consequences that affect APM's design:
 
-- **Los subagentes corren en background por defecto** desde Claude Code v2.1.198. Si el orquestador omite `run_in_background`, la llamada es no bloqueante. `background: true` en la `AgentDefinition` fuerza background siempre.
-- **Anidamiento:** por defecto un subagente puede lanzar subagentes hasta **3 capas** por debajo de la conversación principal (v2.1.219+). Se controla con `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`; ponerlo a `1` desactiva el anidamiento.
-- **La herramienta se llama `Agent`, no `Task`.** Renombrada en Claude Code v2.1.63. Las versiones actuales emiten `"Agent"` en los bloques `tool_use` pero **siguen usando `"Task"`** en la lista de herramientas de `system:init` y en `result.permission_denials[].tool_name`. Hay que comprobar ambos valores.
-- **Escaneo de la salida del subagente** (v2.1.210+): antes de que el padre lea el mensaje final, Claude Code neutraliza patrones con forma de instrucción (`<system-reminder>`, `Human:`/`Assistant:`, menciones a la configuración de permisos) y antepone una línea `[harness: ...]`. Nunca borra ni reescribe texto. Es una mitigación de prompt-injection agente-a-agente que ya viene de serie.
-- Los transcripts de subagentes **persisten aparte** del principal y sobreviven a la compactación del hilo principal. Se pueden reanudar por `agentId` (que aparece como texto `agentId: <id>` en el resultado de la herramienta `Agent`) reanudando la **misma sesión**. Los agentes integrados `Explore` y `Plan` son one-shot y **no** devuelven `agentId`.
+- **Subagents run in the background by default** since Claude Code v2.1.198. If the orchestrator omits `run_in_background`, the call is non-blocking. `background: true` in the `AgentDefinition` always forces background.
+- **Nesting:** by default a subagent can launch subagents up to **3 layers** below the main conversation (v2.1.219+). Controlled with `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`; setting it to `1` disables nesting.
+- **The tool is called `Agent`, not `Task`.** Renamed in Claude Code v2.1.63. Current versions emit `"Agent"` in `tool_use` blocks but **still use `"Task"`** in the `system:init` tool list and in `result.permission_denials[].tool_name`. Check both values.
+- **Subagent output scanning** (v2.1.210+): before the parent reads the final message, Claude Code neutralizes instruction-shaped patterns (`<system-reminder>`, `Human:`/`Assistant:`, mentions of permission settings) and prepends a `[harness: ...]` line. It never deletes or rewrites text. It's a built-in agent-to-agent prompt-injection mitigation.
+- Subagent transcripts **persist separately** from the main one and survive compaction of the main thread. They can be resumed by `agentId` (shown as `agentId: <id>` text in the `Agent` tool result) by resuming the **same session**. The built-in `Explore` and `Plan` agents are one-shot and **don't** return an `agentId`.
 
 ---
 
-## 4. Modelo distinto por subagente
+## 4. A different model per subagent
 
-**Sí.** Campo `model` en `AgentDefinition`. Valores aceptados, cita literal de la tabla de la referencia TypeScript:
+**Yes.** The `model` field in `AgentDefinition`. Accepted values, verbatim from the TypeScript reference table:
 
 > `model` — Model override for this agent. Accepts an alias such as `'fable'`, `'opus'`, `'sonnet'`, `'haiku'`, `'inherit'`, or a full model ID. If omitted or `'inherit'`, uses the main model.
 
-Alias verificados: **`fable`, `opus`, `sonnet`, `haiku`, `inherit`**. También acepta el ID completo del modelo. Para la lista de IDs válidos la doc remite a `/docs/en/model-config#available-models` — **NO VERIFICADO**, no descargué esa página, así que no cito IDs concretos de modelo aquí.
+Verified aliases: **`fable`, `opus`, `sonnet`, `haiku`, `inherit`**. It also accepts the full model ID. For the list of valid IDs the docs point to `/docs/en/model-config#available-models` — **NOT VERIFIED**, I didn't download that page, so I don't cite specific model IDs here.
 
-Ejemplo real (subagents.md → "Dynamic agent configuration"):
+A real example (subagents.md → "Dynamic agent configuration"):
 
 ```typescript
 import { query, type AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
@@ -167,31 +167,31 @@ function createSecurityAgent(securityLevel: "basic" | "strict"): AgentDefinition
 }
 ```
 
-El modelo principal se fija con `Options.model` (alias o nombre completo) y se puede cambiar en caliente con `query.setModel(model?)` (solo en modo streaming input; `undefined` o `"default"` restablece el modelo por defecto de la sesión).
+The main model is set with `Options.model` (alias or full name) and can be changed on the fly with `query.setModel(model?)` (streaming input mode only; `undefined` or `"default"` restores the session's default model).
 
-`AgentDefinition` también acepta `effort` (`'low' | 'medium' | 'high' | 'xhigh' | 'max' | number`) y `maxTurns` por subagente — útil para acotar coste por rol.
+`AgentDefinition` also accepts `effort` (`'low' | 'medium' | 'high' | 'xhigh' | 'max' | number`) and `maxTurns` per subagent — useful to bound cost per role.
 
 ---
 
-## 5. Sesiones para un servicio web multi-usuario con reinicios
+## 5. Sessions for a multi-user web service with restarts
 
-### 5.1 Dónde guarda el estado por defecto
+### 5.1 Where state is stored by default
 
-Cita literal de hosting.md:
+Verbatim from hosting.md:
 
-| Estado | Ubicación por defecto |
+| State | Default location |
 |---|---|
-| Transcripts de sesión | `~/.claude/projects/`, o el directorio `projects/` bajo `CLAUDE_CONFIG_DIR` si está definido |
-| Ficheros de memoria `CLAUDE.md` | `~/.claude/CLAUDE.md` (nivel usuario) y el working directory de la sesión (nivel proyecto) |
-| Artefactos del working directory | El working directory de la sesión |
+| Session transcripts | `~/.claude/projects/`, or the `projects/` directory under `CLAUDE_CONFIG_DIR` if set |
+| `CLAUDE.md` memory files | `~/.claude/CLAUDE.md` (user level) and the session's working directory (project level) |
+| Working directory artifacts | The session's working directory |
 
 > "None of them survive a container restart, a scale-down, or a move to a different node."
 
-Además: **el SDK lanza un subproceso `claude` por sesión** y habla con él por stdio. Una sesión activa = un proceso. No es un wrapper stateless de API.
+Also: **the SDK launches one `claude` subprocess per session** and talks to it over stdio. One active session = one process. It's not a stateless API wrapper.
 
-### 5.2 La respuesta correcta para APM: `sessionStore`
+### 5.2 The right answer for APM: `sessionStore`
 
-Existe una opción `sessionStore` en `Options` que espeja los transcripts a un backend externo (S3, Redis, Postgres o adaptador propio). Interfaz exacta (session-storage.md):
+There's a `sessionStore` option in `Options` that mirrors transcripts to an external backend (S3, Redis, Postgres or your own adapter). The exact interface (session-storage.md):
 
 ```typescript
 // Exported from @anthropic-ai/claude-agent-sdk as
@@ -221,7 +221,7 @@ type SessionStore = {
 };
 ```
 
-Patrón "hybrid sessions" recomendado por Anthropic para exactamente nuestro caso (hosting.md):
+The "hybrid sessions" pattern Anthropic recommends for exactly our case (hosting.md):
 
 ```typescript
 import { query, type SessionStore } from "@anthropic-ai/claude-agent-sdk";
@@ -238,26 +238,26 @@ for await (const message of query({
 }
 ```
 
-Comportamiento verificado del `SessionStore`:
-- **Solo transcripts.** No espeja `CLAUDE.md` ni artefactos del working directory.
-- **Espejo, no reemplazo.** El subproceso escribe primero en disco local; el store recibe una copia. Lo local sigue siendo autoritativo.
-- **Fallos:** un batch rechazado se reintenta hasta 3 veces con backoff (un timeout no se reintenta). Si sigue fallando el SDK lo descarta, emite `{ type: "system", subtype: "mirror_error" }` y **continúa** la query. Hay que alertar sobre esos mensajes.
-- `listSubkeys` es necesario para restaurar transcripts de subagentes; si no se implementa, solo se restaura el transcript principal.
-- `forkSession` no es una copia byte a byte.
-- `loadTimeoutMs` (default `60000`) acota cada `load()`/`listSubkeys()` — marcado como *Alpha* en la doc.
-- `sessionStoreFlush: 'batched' | 'eager'` (default `'batched'`) — también *Alpha*.
+Verified `SessionStore` behavior:
+- **Transcripts only.** It doesn't mirror `CLAUDE.md` or working-directory artifacts.
+- **A mirror, not a replacement.** The subprocess writes to local disk first; the store gets a copy. Local stays authoritative.
+- **Failures:** a rejected batch is retried up to 3 times with backoff (a timeout isn't retried). If it keeps failing the SDK drops it, emits `{ type: "system", subtype: "mirror_error" }` and **carries on** with the query. You need to alert on those messages.
+- `listSubkeys` is needed to restore subagent transcripts; if not implemented, only the main transcript is restored.
+- `forkSession` isn't a byte-for-byte copy.
+- `loadTimeoutMs` (default `60000`) bounds each `load()`/`listSubkeys()` — marked *Alpha* in the docs.
+- `sessionStoreFlush: 'batched' | 'eager'` (default `'batched'`) — also *Alpha*.
 
 ### 5.3 `resume` / `forkSession` / `sessionId`
 
-- El `session_id` se lee del campo `session_id` del mensaje `result` (presente en **todos** los results, éxito o error), y también antes en el `SDKSystemMessage` de init.
-- `Options.resume: string` → ID de sesión a reanudar.
-- `Options.forkSession: boolean` (default `false`) → al reanudar, bifurca a un ID nuevo en vez de continuar el original.
-- `Options.sessionId: string` → **permite fijar tú el UUID de la sesión** en vez de que se autogenere. Muy útil para atarlo a una fila de nuestra BD.
-- `Options.persistSession: boolean` (default `true`) → a `false` desactiva la persistencia en disco (la sesión no se puede reanudar).
-- `Options.resumeSessionAt: string` → reanudar en un UUID de mensaje concreto.
-- `Options.continue: boolean` → continúa la conversación más reciente (requiere `listSessions` en el store si se usa `sessionStore`).
+- The `session_id` is read from the `session_id` field of the `result` message (present in **every** result, success or error), and earlier in the init `SDKSystemMessage`.
+- `Options.resume: string` → the session ID to resume.
+- `Options.forkSession: boolean` (default `false`) → when resuming, forks to a new ID instead of continuing the original.
+- `Options.sessionId: string` → **lets you set the session UUID yourself** instead of auto-generating it. Very useful to tie it to a row in our DB.
+- `Options.persistSession: boolean` (default `true`) → `false` disables disk persistence (the session can't be resumed).
+- `Options.resumeSessionAt: string` → resume at a specific message UUID.
+- `Options.continue: boolean` → continues the most recent conversation (requires `listSessions` in the store if `sessionStore` is used).
 
-Captura del ID (sessions.md), snippet real:
+Capturing the ID (sessions.md), a real snippet:
 
 ```typescript
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -284,11 +284,11 @@ try {
 }
 ```
 
-⚠️ Nótese el `try/catch`: **una `query()` single-shot lanza excepción después de emitir el result de error**. Hay que envolverla siempre.
+⚠️ Note the `try/catch`: **a single-shot `query()` throws after emitting the error result**. Always wrap it.
 
-### 5.4 Aislamiento multi-tenant (obligatorio en APM)
+### 5.4 Multi-tenant isolation (mandatory if APM is ever sold)
 
-Snippet literal de hosting.md → "Multi-tenant isolation":
+Verbatim snippet from hosting.md → "Multi-tenant isolation":
 
 ```typescript
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -313,45 +313,45 @@ for await (const message of query({
 }
 ```
 
-Las cuatro medidas, textuales:
-1. `settingSources: []` para que no cargue ninguna configuración del sistema de ficheros.
-2. `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` — **la "auto memory" de `~/.claude/projects/<project>/memory/` se carga en el system prompt INDEPENDIENTEMENTE de `settingSources`**. Sin este flag, hay fuga de contexto entre tenants.
-3. `CLAUDE_CONFIG_DIR` apuntando a un directorio por tenant (si no, comparten `~/.claude.json`).
-4. `cwd` por tenant, pasado **explícitamente en cada `query()`**.
+The four measures, verbatim:
+1. `settingSources: []` so no configuration is loaded from the file system.
+2. `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` — **the "auto memory" in `~/.claude/projects/<project>/memory/` is loaded into the system prompt REGARDLESS of `settingSources`**. Without this flag, context leaks between tenants.
+3. `CLAUDE_CONFIG_DIR` pointing at a per-tenant directory (otherwise they share `~/.claude.json`).
+4. A per-tenant `cwd`, passed **explicitly on every `query()`**.
 
-Más: reglas de egress por tenant en el proxy (IPs, credenciales, allowlists de dominio distintas).
+Plus: per-tenant egress rules in the proxy (different IPs, credentials, domain allowlists).
 
-`SettingSource` verificado:
+Verified `SettingSource`:
 ```typescript
 type SettingSource = "user" | "project" | "local";
 ```
-| Valor | Ubicación |
+| Value | Location |
 |---|---|
 | `'user'` | `~/.claude/settings.json` |
 | `'project'` | `.claude/settings.json` |
 | `'local'` | `.claude/settings.local.json` |
 
-Si se omite `settingSources`, **carga las tres** (igual que el CLI). Precedencia: local > project > user; las opciones programáticas ganan a las tres; la política gestionada (managed) gana a todo.
+If `settingSources` is omitted, **it loads all three** (like the CLI). Precedence: local > project > user; programmatic options beat all three; managed policy beats everything.
 
-### 5.5 Escalado
+### 5.5 Scaling
 
-Fórmula literal de hosting.md:
+Verbatim formula from hosting.md:
 ```text
 agents per host = (host RAM - overhead) / (per-session RAM ceiling)
 ```
-Punto de partida recomendado: **1 GiB RAM, 5 GiB disco y 1 CPU por agente**. Para el patrón "long-running sessions", pool de contenedores tras un balanceador con **hashing consistente sobre `sessionId`** para fijar cada sesión a su contenedor.
+Recommended starting point: **1 GiB RAM, 5 GiB disk and 1 CPU per agent**. For the "long-running sessions" pattern, a pool of containers behind a load balancer with **consistent hashing on `sessionId`** to pin each session to its container.
 
-Limitaciones conocidas declaradas por Anthropic:
-- **No hay timeout de sesión de alto nivel.** Una sesión no expira sola; acótala con `maxTurns`.
-- Crecimiento de memoria en sesiones largas → reciclar subprocesos.
-- Fan-outs grandes de subagentes paralelos pueden chocar con rate limits → batches pequeños.
-- **No hay deadline de reloj por subagente**; solo `maxTurns` por `AgentDefinition` y `CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS` (watchdog de estancamiento, solo para subagentes en background, default `600000` ms).
+Known limitations declared by Anthropic:
+- **There's no high-level session timeout.** A session doesn't expire on its own; bound it with `maxTurns`.
+- Memory growth in long sessions → recycle subprocesses.
+- Large fan-outs of parallel subagents can hit rate limits → small batches.
+- **There's no per-subagent wall-clock deadline**; only `maxTurns` per `AgentDefinition` and `CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS` (a stall watchdog, background subagents only, default `600000` ms).
 
 ---
 
-## 6. `canUseTool`: firma exacta y aprobación humana asíncrona
+## 6. `canUseTool`: exact signature and asynchronous human approval
 
-Firma literal (typescript.md):
+Verbatim signature (typescript.md):
 
 ```typescript
 type CanUseTool = (
@@ -369,7 +369,7 @@ type CanUseTool = (
 ) => Promise<PermissionResult | null>;
 ```
 
-Retorno:
+Return value:
 
 ```typescript
 type PermissionResult =
@@ -387,7 +387,7 @@ type PermissionResult =
     };
 ```
 
-Snippet real (user-input.md):
+A real snippet (user-input.md):
 
 ```typescript
 canUseTool: async (toolName, input) => {
@@ -402,29 +402,29 @@ canUseTool: async (toolName, input) => {
 }
 ```
 
-### ¿Se puede bloquear la promesa? ¿Hay timeout?
+### Can the promise be held open? Is there a timeout?
 
-Cita textual de user-input.md, párrafo introductorio:
+Verbatim quote from user-input.md, introductory paragraph:
 
 > "The callback can stay pending indefinitely. Execution remains paused until your callback returns, and the SDK only cancels the wait when the query itself is cancelled. If a user might take longer to respond than your process can reasonably stay running, return the [`defer` hook decision], which lets the process exit and resume later from the persisted session."
 
-Y en la referencia de tipos:
+And in the type reference:
 
 > "Returning `null` in any other case leaves the tool call blocked indefinitely, because no `control_response` is ever sent and **permission prompts don't time out**."
 
-**Respuesta directa: sí se puede bloquear la promesa, y NO hay timeout.** Para APM eso significa dos caminos:
+**Direct answer: yes, the promise can be held open, and there is NO timeout.** For APM that means two paths:
 
-**Camino A — mantener la promesa viva** (el usuario aprueba desde la UI en minutos). Funciona mientras el proceso Node y el subproceso `claude` sigan vivos. Frágil ante un `docker compose up --build`.
+**Path A — keep the promise alive** (the user approves from the UI within minutes). It works as long as the Node process and the `claude` subprocess stay alive. Fragile against a `docker compose up --build`.
 
-**Camino B — `defer` (recomendado para APM, sobrevive a reinicios).** Round-trip verificado (code.claude.com/docs/en/hooks.md → "Defer a tool call for later"):
+**Path B — `defer` (recommended for APM, survives restarts).** A verified round-trip (code.claude.com/docs/en/hooks.md → "Defer a tool call for later"):
 
-1. Claude llama a la herramienta. Se dispara el hook `PreToolUse`.
-2. El hook devuelve `permissionDecision: "defer"`. La herramienta no se ejecuta. El proceso **sale** con `stop_reason: "tool_deferred"` y la llamada pendiente preservada en el transcript.
-3. Tu proceso lee `deferred_tool_use` del result del SDK, muestra la petición en tu UI y espera respuesta.
-4. Tu proceso reanuda con `resume: <session-id>`. La misma llamada dispara `PreToolUse` otra vez.
-5. El hook devuelve `permissionDecision: "allow"` con la respuesta en `updatedInput`. La herramienta se ejecuta y Claude sigue.
+1. Claude calls the tool. The `PreToolUse` hook fires.
+2. The hook returns `permissionDecision: "defer"`. The tool doesn't run. The process **exits** with `stop_reason: "tool_deferred"` and the pending call preserved in the transcript.
+3. Your process reads `deferred_tool_use` from the SDK result, shows the request in your UI and waits for an answer.
+4. Your process resumes with `resume: <session-id>`. The same call fires `PreToolUse` again.
+5. The hook returns `permissionDecision: "allow"` with the answer in `updatedInput`. The tool runs and Claude continues.
 
-Payload real:
+A real payload:
 ```json
 {
   "type": "result",
@@ -441,21 +441,21 @@ Payload real:
 
 > "There is no timeout or retry limit. The session remains on disk until you resume it, subject to the `cleanupPeriodDays` retention sweep that deletes session files after 30 days by default."
 
-**Restricción dura de `defer`:** solo funciona si Claude hace **una única** llamada a herramienta en ese turno. Si hace varias a la vez, `defer` se ignora con un warning y la herramienta pasa por el flujo normal de permisos. Además `defer` solo se honra en modo no interactivo (`-p`), que es el caso del SDK.
+**Hard constraint on `defer`:** it only works if Claude makes a **single** tool call in that turn. If it makes several at once, `defer` is ignored with a warning and the tool goes through the normal permission flow. Also, `defer` is only honored in non-interactive mode (`-p`), which is the SDK's case.
 
-Si al reanudar la herramienta ya no existe (p. ej. un servidor MCP no conectado), el proceso sale con `stop_reason: "tool_deferred_unavailable"` e `is_error: true`.
+If the tool no longer exists on resume (e.g. an MCP server that didn't connect), the process exits with `stop_reason: "tool_deferred_unavailable"` and `is_error: true`. (SPIKE-01 found that for in-process MCP servers this is NOT what happens in practice — see `SPIKE-01-defer.md`.)
 
-### Otras trampas de `canUseTool` verificadas
+### Other verified `canUseTool` traps
 
-- **No se invoca para herramientas auto-aprobadas.** El orden de evaluación es: **1) Hooks → 2) reglas deny → 3) reglas ask → 4) permission mode → 5) reglas allow → 6) `canUseTool`**. Si pones `"Bash"` a secas en `allowedTools`, tu callback **nunca** verá una llamada a Bash.
-- Para lógica que deba aplicarse a **todas** las llamadas, la doc dice explícitamente: usa un hook `PreToolUse`, no `canUseTool`.
-- Desde v2.1.198 el SDK TypeScript emite un `process warning` con código `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` si pasas un `canUseTool` inalcanzable (por `bypassPermissions` o por entradas "pelonas" en `allowedTools`). Conviene escucharlo en desarrollo.
-- `AskUserQuestion`, las herramientas MCP marcadas `requiresUserInteraction` y las de conectores que la organización puso en `ask` **siempre** llegan al callback, incluso con regla allow. En modo `dontAsk` se deniegan sin invocarlo.
-- Antes de Claude Code v2.1.207, un `allow` sin `updatedInput` se rechazaba con error de validación. Con SDK actual ya no hace falta, pero pasar `updatedInput: input` es lo más seguro.
-- `query.reinitialize()` (Claude Code v2.1.195+) reenvía el `initialize` tras un corte de transporte para que las peticiones de permiso pendientes vuelvan a llegar al callback. **Haz el callback idempotente por `requestId`**, porque una petición cuya respuesta se perdió se vuelve a despachar.
-- El retorno `null` es para cuando tu app ya envió el `control_response` por su propio canal (p. ej. un POST HTTP firmado) haciendo eco de `requestId`. Requiere Claude Code v2.1.199+.
+- **It isn't called for auto-approved tools.** The evaluation order is: **1) Hooks → 2) deny rules → 3) ask rules → 4) permission mode → 5) allow rules → 6) `canUseTool`**. If you put a bare `"Bash"` in `allowedTools`, your callback will **never** see a Bash call.
+- For logic that must apply to **every** call, the docs say explicitly: use a `PreToolUse` hook, not `canUseTool`.
+- Since v2.1.198 the TypeScript SDK emits a `process warning` with code `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` if you pass an unreachable `canUseTool` (because of `bypassPermissions` or bare entries in `allowedTools`). Worth listening for in development.
+- `AskUserQuestion`, MCP tools marked `requiresUserInteraction`, and connector tools the organization set to `ask` **always** reach the callback, even with an allow rule. In `dontAsk` mode they're denied without calling it.
+- Before Claude Code v2.1.207, an `allow` without `updatedInput` was rejected with a validation error. With the current SDK it's no longer needed, but passing `updatedInput: input` is the safest.
+- `query.reinitialize()` (Claude Code v2.1.195+) resends `initialize` after a transport drop so pending permission requests reach the callback again. **Make the callback idempotent by `requestId`**, because a request whose answer was lost gets dispatched again.
+- Returning `null` is for when your app already sent the `control_response` through its own channel (e.g. a signed HTTP POST) echoing the `requestId`. Requires Claude Code v2.1.199+.
 
-`PermissionMode` verificado:
+Verified `PermissionMode`:
 ```typescript
 type PermissionMode =
   | "default"            // Standard permission behavior
@@ -465,13 +465,13 @@ type PermissionMode =
   | "dontAsk"            // Don't prompt for permissions, deny if not pre-approved
   | "auto";              // Model classifier approves or denies permission prompts
 ```
-`bypassPermissions` exige además `allowDangerouslySkipPermissions: true`.
+`bypassPermissions` also requires `allowDangerouslySkipPermissions: true`.
 
 ---
 
-## 7. Hooks: eventos, firma y capacidad de denegar
+## 7. Hooks: events, signature and the ability to deny
 
-Lista completa y literal (`HookEvent`, typescript.md) — **31 eventos**:
+The full verbatim list (`HookEvent`, typescript.md) — **31 events**:
 
 ```typescript
 type HookEvent =
@@ -508,7 +508,7 @@ type HookEvent =
   | "MessageDisplay";
 ```
 
-Firma:
+Signature:
 ```typescript
 type HookCallback = (
   input: HookInput,               // Union of all hook input types
@@ -523,7 +523,7 @@ interface HookCallbackMatcher {
 }
 ```
 
-Registro:
+Registration:
 ```typescript
 for await (const message of query({
   prompt: "Your prompt",
@@ -537,9 +537,9 @@ for await (const message of query({
 }
 ```
 
-### ¿Pueden denegar? Sí.
+### Can they deny? Yes.
 
-`SyncHookJSONOutput` (extracto literal, campos relevantes):
+`SyncHookJSONOutput` (verbatim excerpt, relevant fields):
 
 ```typescript
 type SyncHookJSONOutput = {
@@ -567,7 +567,7 @@ type SyncHookJSONOutput = {
 };
 ```
 
-Además existe la variante asíncrona:
+There's also the asynchronous variant:
 ```typescript
 type AsyncHookJSONOutput = {
   async: true;
@@ -575,7 +575,7 @@ type AsyncHookJSONOutput = {
 };
 ```
 
-`BaseHookInput` (todos los hooks lo extienden):
+`BaseHookInput` (every hook extends it):
 ```typescript
 type BaseHookInput = {
   session_id: string;
@@ -588,19 +588,19 @@ type BaseHookInput = {
   agent_type?: string;
 };
 ```
-`agent_id`/`agent_type` se rellenan cuando el hook dispara **dentro de un subagente** — es el gancho natural para atribuir coste y auditoría por subagente en APM.
+`agent_id`/`agent_type` are filled in when the hook fires **inside a subagent** — the natural hook to attribute cost and auditing per subagent in APM.
 
-Timeouts de hooks verificados: cuando se omite `timeout`, Claude Code aplica el default del evento — **10 minutos** para la mayoría, **30 s** para `UserPromptSubmit`, **10 s** para `MessageDisplay`, presupuesto de **1,5 s** para `SessionEnd`.
+Verified hook timeouts: when `timeout` is omitted, Claude Code applies the event's default — **10 minutes** for most, **30 s** for `UserPromptSubmit`, **10 s** for `MessageDisplay`, a **1.5 s** budget for `SessionEnd`.
 
-Matchers: si contiene solo letras, dígitos, `_`, `-`, espacios, `,` y `|` → comparación exacta con alternativas separadas por `|` o `,`. Cualquier otro carácter → **regex sin anclar**. `*`, cadena vacía u omitirlo → matchea todo. Las herramientas MCP siguen `mcp__<server>__<action>`; `mcp__memory` a secas **no matchea nada**, hay que escribir `mcp__memory__.*`.
+Matchers: if it only contains letters, digits, `_`, `-`, spaces, `,` and `|` → exact match with alternatives separated by `|` or `,`. Any other character → an **unanchored regex**. `*`, an empty string or omitting it → matches everything. MCP tools follow `mcp__<server>__<action>`; a bare `mcp__memory` **matches nothing**, you have to write `mcp__memory__.*`.
 
-Un detalle del orden de evaluación que importa: **un hook que devuelve `allow` NO salta las reglas deny ni ask**; esas se evalúan igualmente.
+An evaluation-order detail that matters: **a hook that returns `allow` does NOT skip deny or ask rules**; those are evaluated anyway.
 
 ---
 
-## 8. `createSdkMcpServer` y `tool()`: herramientas custom in-process
+## 8. `createSdkMcpServer` and `tool()`: in-process custom tools
 
-Firmas literales (typescript.md):
+Verbatim signatures (typescript.md):
 
 ```typescript
 function tool<Schema extends AnyZodRawShape>(
@@ -620,7 +620,7 @@ function createSdkMcpServer(options: {
 }): McpSdkServerConfigWithInstance;
 ```
 
-Snippet real completo (custom-tools.md):
+A complete real snippet (custom-tools.md):
 
 ```typescript
 import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
@@ -656,19 +656,19 @@ const weatherServer = createSdkMcpServer({
 });
 ```
 
-Notas verificadas:
-- El servidor se pasa en `Options.mcpServers`; la **clave** del objeto es el `{server_name}` del nombre cualificado `mcp__{server_name}__{tool_name}`. Hay que listar ese nombre completo en `allowedTools` para que corra sin prompt.
-- `inputSchema` acepta **Zod 3 y Zod 4** (peerDependency declarada: `zod: ^4.0.0`).
-- Opcionales en TS: `.default()` en el campo Zod.
-- `alwaysLoad` (por herramienta o por servidor) mantiene el schema en el prompt inicial en vez de diferirlo detrás de *tool search*.
-- Existe `Options.toolAliases`, p. ej. `{ Bash: 'mcp__workspace__bash' }`, para **sustituir una herramienta integrada por tu implementación MCP**. Interesante para APM si queremos un Bash controlado.
-- `strictMcpConfig: true` ignora `.mcp.json` del proyecto, settings de usuario, MCP de plugins y conectores de claude.ai. **Recomendado en un servicio multi-tenant.**
+Verified notes:
+- The server goes in `Options.mcpServers`; the object's **key** is the `{server_name}` in the qualified name `mcp__{server_name}__{tool_name}`. That full name must be listed in `allowedTools` for it to run without a prompt.
+- `inputSchema` accepts **Zod 3 and Zod 4** (declared peerDependency: `zod: ^4.0.0`).
+- Optional fields in TS: `.default()` on the Zod field.
+- `alwaysLoad` (per tool or per server) keeps the schema in the initial prompt instead of deferring it behind *tool search*.
+- There's `Options.toolAliases`, e.g. `{ Bash: 'mcp__workspace__bash' }`, to **replace a built-in tool with your MCP implementation**. Interesting for APM if we want a controlled Bash.
+- `strictMcpConfig: true` ignores the project's `.mcp.json`, user settings, plugin MCPs and claude.ai connectors. **Recommended in a multi-tenant service.**
 
 ---
 
-## 9. Coste y uso por turno
+## 9. Cost and usage per turn
 
-Campos del `SDKResultMessage` (literal, rama de éxito):
+`SDKResultMessage` fields (verbatim, success branch):
 
 ```typescript
 type SDKResultMessage =
@@ -706,26 +706,26 @@ type SDKResultMessage =
         | "error_during_execution"
         | "error_max_budget_usd"
         | "error_max_structured_output_retries";
-      /* ...mismos campos de coste: total_cost_usd, usage, modelUsage... */
+      /* ...the same cost fields: total_cost_usd, usage, modelUsage... */
       errors: string[];
     };
 ```
 
-### ⚠️ Hallazgo que cambia el diseño de facturación
+### ⚠️ A finding that changes the billing design
 
-Tabla literal de cost-tracking.md:
+Verbatim table from cost-tracking.md:
 
-| Campo | Actividad de subagentes |
+| Field | Subagent activity |
 |---|---|
-| `usage` | **Excluida.** Cuenta solo el bucle del agente principal; los tokens consumidos dentro de subagentes NO se suman |
-| `total_cost_usd` | **Incluida.** Cuenta las peticiones de subagentes junto al bucle principal |
-| `modelUsage` / `model_usage` | **Incluida.** Desglosada por modelo |
+| `usage` | **Excluded.** Counts only the main agent loop; tokens consumed inside subagents are NOT added |
+| `total_cost_usd` | **Included.** Counts subagent requests along with the main loop |
+| `modelUsage` / `model_usage` | **Included.** Broken down by model |
 
 > "Use `modelUsage` for whole-tree token accounting; the `usage` field undercounts as soon as nesting occurs."
 
-En APM, que es un orquestador de subagentes, **usar `usage` para facturar sería subcontar sistemáticamente**. Hay que usar `total_cost_usd` (total) y `modelUsage` (desglose).
+In APM, which is a subagent orchestrator, **using `usage` for billing would systematically undercount**. Use `total_cost_usd` (total) and `modelUsage` (breakdown).
 
-Snippet real de desglose por modelo:
+A real per-model breakdown snippet:
 
 ```typescript
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -747,9 +747,9 @@ try {
 }
 ```
 
-### En streaming (por paso)
+### In streaming (per step)
 
-Cada mensaje `assistant` lleva un `BetaMessage` anidado en `message.message` con `id` y `usage`. **Las llamadas a herramientas en paralelo producen varios mensajes con el MISMO `id` y el mismo `usage`** → hay que deduplicar por ID o inflas el contador. Snippet real:
+Each `assistant` message carries a `BetaMessage` nested in `message.message` with `id` and `usage`. **Parallel tool calls produce several messages with the SAME `id` and the same `usage`** → you must dedupe by ID or you inflate the counter. A real snippet:
 
 ```typescript
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -776,63 +776,63 @@ try {
 }
 ```
 
-Otros datos verificados:
-- **No hay total por sesión.** Cada `query()` reporta su propio `total_cost_usd`; acumular es responsabilidad nuestra.
-- `Options.maxBudgetUsd` corta la query cuando la estimación de coste **cliente** alcanza ese valor; se compara contra la misma estimación que `total_cost_usd`. El result sale con `subtype: "error_max_budget_usd"` (y **sigue trayendo** los campos de coste).
-- `total_cost_usd` es una **estimación del lado cliente**, no una factura. La doc lo llama "client-side cost estimate".
-- `permission_denials` en el result permite auditar qué se bloqueó.
-- OpenTelemetry: el SDK hereda la configuración del entorno (`CLAUDE_CODE_ENABLE_TELEMETRY=1`, `OTEL_*`). Los prompts y las entradas de herramientas **no** se exportan por defecto.
+Other verified facts:
+- **There's no per-session total.** Each `query()` reports its own `total_cost_usd`; accumulating is our job.
+- `Options.maxBudgetUsd` cuts the query when the **client-side** cost estimate reaches that value; it's compared against the same estimate as `total_cost_usd`. The result comes out with `subtype: "error_max_budget_usd"` (and **still carries** the cost fields).
+- `total_cost_usd` is a **client-side estimate**, not an invoice. The docs call it a "client-side cost estimate".
+- `permission_denials` in the result lets you audit what was blocked.
+- OpenTelemetry: the SDK inherits the environment's configuration (`CLAUDE_CODE_ENABLE_TELEMETRY=1`, `OTEL_*`). Prompts and tool inputs are **not** exported by default.
 
 ---
 
-## 10. Autenticación y runtime en servidor (crítico para el Dockerfile)
+## 10. Authentication and server runtime (critical for the Dockerfile)
 
-### ¿Basta `ANTHROPIC_API_KEY`?
+### Is `ANTHROPIC_API_KEY` enough?
 
-**Sí.** hosting.md: *"the subprocess reads `ANTHROPIC_API_KEY` from its environment"*. quickstart.md: *"The SDK reads the key from the environment of the process that runs your agent; it doesn't load `.env` files automatically."* — si guardamos la clave en `.env`, hay que cargarla nosotros (p. ej. `dotenv`) antes de llamar al SDK.
+**Yes.** hosting.md: *"the subprocess reads `ANTHROPIC_API_KEY` from its environment"*. quickstart.md: *"The SDK reads the key from the environment of the process that runs your agent; it doesn't load `.env` files automatically."* — if the key is stored in `.env`, we have to load it ourselves (e.g. `dotenv`, or the container's `env_file`) before calling the SDK.
 
-Alternativas de proveedor verificadas: `CLAUDE_CODE_USE_BEDROCK=1`, `CLAUDE_CODE_USE_ANTHROPIC_AWS=1` + `ANTHROPIC_AWS_WORKSPACE_ID`, `CLAUDE_CODE_USE_VERTEX=1`, `CLAUDE_CODE_USE_FOUNDRY=1`. También `ANTHROPIC_BASE_URL` para enrutar por un proxy que inyecte la clave fuera del contenedor.
+Verified provider alternatives: `CLAUDE_CODE_USE_BEDROCK=1`, `CLAUDE_CODE_USE_ANTHROPIC_AWS=1` + `ANTHROPIC_AWS_WORKSPACE_ID`, `CLAUDE_CODE_USE_VERTEX=1`, `CLAUDE_CODE_USE_FOUNDRY=1`. Also `ANTHROPIC_BASE_URL` to route through a proxy that injects the key outside the container.
 
-⚠️ **Restricción legal literal** (overview.md y quickstart.md):
+⚠️ **A verbatim legal restriction** (overview.md and quickstart.md):
 > "Unless previously approved, Anthropic does not allow third party developers to offer claude.ai login or rate limits for their products, including agents built on the Claude Agent SDK. Use the API key authentication methods described in the Quickstart instead."
 
-Es decir: **APM no puede dejar que los clientes se autentiquen con su suscripción de claude.ai.** O usamos nuestra API key (y facturamos), o cada tenant trae la suya.
+That is: **APM can't let customers authenticate with their claude.ai subscription.** Either we use our API key (and bill), or each tenant brings their own.
 
-### ¿Hace falta el CLI de Claude Code instalado en el contenedor?
+### Does the Claude Code CLI need to be installed in the container?
 
-**NO.** Verificado en dos sitios:
+**NO.** Verified in two places:
 
 > "Both SDK packages bundle a native Claude Code binary for the host platform, so no separate Claude Code or Node.js install is needed for the spawned CLI" (hosting.md)
 
 > "The SDK bundles a native Claude Code binary for your platform as an optional dependency such as `@anthropic-ai/claude-agent-sdk-darwin-arm64`. You don't need to install Claude Code separately. The SDK version tracks the bundled Claude Code version: SDK v0.3.191 bundles Claude Code v2.1.191... If your package manager skips optional dependencies, the SDK throws `Native CLI binary for <platform> not found`; set `pathToClaudeCodeExecutable` to a separately installed `claude` binary instead." (typescript.md)
 
-**Consecuencias directas para nuestro Dockerfile:**
-- **NO usar `npm ci --omit=optional` ni `--no-optional`.** Rompería el binario nativo.
-- Los paquetes opcionales publicados (verificados en npm) son: `linux-x64`, `linux-arm64`, `linux-x64-musl`, `linux-arm64-musl`, `darwin-x64`, `darwin-arm64`, `win32-x64`, `win32-arm64`. **Hay variantes musl** → una imagen base Alpine sí es viable.
-- Si compilamos a binario único con `bun build --compile`, hay que usar `extractFromBunfs()` y `pathToClaudeCodeExecutable`. No aplica si desplegamos con Node normal.
-- **La versión del SDK ES la versión del CLI.** Actualizar el SDK es la única forma de actualizar el CLI. Correspondencia por número de parche: SDK v0.3.220 ⇒ Claude Code v2.1.220 (patrón documentado con el ejemplo v0.3.191 ⇒ v2.1.191; la correspondencia exacta de 0.3.220 es una inferencia mía, **NO VERIFICADA** directamente).
+**Direct consequences for our Dockerfile:**
+- **DON'T use `npm ci --omit=optional` or `--no-optional`.** It would break the native binary. (See the comment in `api/Dockerfile`.)
+- The published optional packages (verified on npm) are: `linux-x64`, `linux-arm64`, `linux-x64-musl`, `linux-arm64-musl`, `darwin-x64`, `darwin-arm64`, `win32-x64`, `win32-arm64`. **There are musl variants** → an Alpine base image is viable.
+- If we compile to a single binary with `bun build --compile`, use `extractFromBunfs()` and `pathToClaudeCodeExecutable`. Not applicable if we deploy with plain Node.
+- **The SDK version IS the CLI version.** Upgrading the SDK is the only way to upgrade the CLI. Patch-number correspondence: SDK v0.3.220 ⇒ Claude Code v2.1.220 (pattern documented with the example v0.3.191 ⇒ v2.1.191; the exact correspondence for 0.3.220 is my inference, **NOT VERIFIED** directly).
 
-### Dependencias de runtime
+### Runtime dependencies
 
-| Elemento | Valor verificado | Fuente |
+| Item | Verified value | Source |
 |---|---|---|
-| Node.js | **>= 18.0.0** (`engines` del package) / "Node.js 18+" | npm registry + quickstart |
-| Dependencias directas | **ninguna** (`dependencies: null`) | npm registry |
+| Node.js | **>= 18.0.0** (package `engines`) / "Node.js 18+" | npm registry + quickstart |
+| Direct dependencies | **none** (`dependencies: null`) | npm registry |
 | peerDependencies | `zod: ^4.0.0`, `@anthropic-ai/sdk: >=0.93.0`, `@modelcontextprotocol/sdk: ^1.29.0` | npm registry |
-| Runtime JS soportado | `'bun' \| 'deno' \| 'node'` (opción `executable`, autodetectado) | typescript.md |
-| Recursos por agente | 1 GiB RAM, 5 GiB disco, 1 CPU (punto de partida) | hosting.md |
-| Red saliente | HTTPS a `api.anthropic.com` (+ endpoints MCP) | hosting.md |
-| Red entrante | El subproceso **no escucha en red**; tu app expone el puerto | hosting.md |
+| Supported JS runtime | `'bun' \| 'deno' \| 'node'` (`executable` option, auto-detected) | typescript.md |
+| Resources per agent | 1 GiB RAM, 5 GiB disk, 1 CPU (starting point) | hosting.md |
+| Outbound network | HTTPS to `api.anthropic.com` (+ MCP endpoints) | hosting.md |
+| Inbound network | The subprocess **doesn't listen on the network**; your app exposes the port | hosting.md |
 
-⚠️ **NO VERIFICADO:** si el binario nativo requiere `glibc`/`libstdc++` extra en una imagen `node:22-slim` (Debian). La doc no lo dice. Hay que probarlo empíricamente al construir la imagen.
+⚠️ **NOT VERIFIED:** whether the native binary needs extra `glibc`/`libstdc++` in a `node:22-slim` (Debian) image. The docs don't say. It has to be tested empirically when building the image.
 
-⚠️ **NO VERIFICADO:** si el subproceso necesita `git`, `ripgrep` u otros binarios en el PATH para que las herramientas Grep/Glob/Bash funcionen. La doc dice "the container needs only your SDK's language runtime", pero eso se refiere al SDK, no a lo que las herramientas del agente puedan invocar. Hay que probarlo.
+⚠️ **NOT VERIFIED:** whether the subprocess needs `git`, `ripgrep` or other binaries on the PATH for the Grep/Glob/Bash tools to work. The docs say "the container needs only your SDK's language runtime", but that refers to the SDK, not to what the agent's tools may invoke. It has to be tested.
 
 ---
 
-## 11. Despliegue seguro: recomendaciones oficiales
+## 11. Secure deployment: official recommendations
 
-Configuración de contenedor endurecido, **copiada literal** de secure-deployment.md:
+A hardened container configuration, **copied verbatim** from secure-deployment.md:
 
 ```bash
 docker run \
@@ -852,106 +852,106 @@ docker run \
   agent-image
 ```
 
-Aviso explícito de la doc sobre los volúmenes: *"**Avoid mounting sensitive host directories like `~/.ssh`, `~/.aws`, or `~/.config`**"*.
+The docs' explicit warning about volumes: *"**Avoid mounting sensitive host directories like `~/.ssh`, `~/.aws`, or `~/.config`**"*.
 
-Tabla de tecnologías de aislamiento (literal):
+Isolation technology table (verbatim):
 
-| Tecnología | Fuerza de aislamiento | Overhead | Complejidad |
+| Technology | Isolation strength | Overhead | Complexity |
 |---|---|---|---|
-| Sandbox runtime | Buena (defaults seguros) | Muy bajo | Baja |
-| Contenedores (Docker) | Depende del setup | Bajo | Media |
-| gVisor | Excelente (con setup correcto) | Medio/Alto | Media |
-| VMs (Firecracker, QEMU) | Excelente (con setup correcto) | Alto | Media/Alta |
+| Sandbox runtime | Good (secure defaults) | Very low | Low |
+| Containers (Docker) | Depends on setup | Low | Medium |
+| gVisor | Excellent (with correct setup) | Medium/High | Medium |
+| VMs (Firecracker, QEMU) | Excellent (with correct setup) | High | Medium/High |
 
-Existe `@anthropic-ai/sandbox-runtime` (https://github.com/anthropic-experimental/sandbox-runtime): aislamiento OS-level sin Docker, con `bubblewrap` en Linux, allowlists JSON de dominios y rutas, y proxy incorporado. Limitación admitida: **no hace inspección TLS**, así que el allowlist se basa en el hostname que declara el cliente y es vulnerable a domain fronting.
+There's `@anthropic-ai/sandbox-runtime` (https://github.com/anthropic-experimental/sandbox-runtime): OS-level isolation without Docker, using `bubblewrap` on Linux, JSON allowlists for domains and paths, and a built-in proxy. Admitted limitation: **it doesn't do TLS inspection**, so the allowlist relies on the hostname the client declares and is vulnerable to domain fronting.
 
-Principio de credenciales (**el más relevante para APM**):
+The credentials principle (**the most relevant for APM**):
 > "rather than giving an agent direct access to an API key, you could run a proxy outside the agent's environment that injects the key into requests. The agent can make API calls, but it never sees the credential itself. This pattern is useful for multi-tenant deployments."
 
-Otras defensas de serie ya presentes en Claude Code:
-- Parseo de comandos bash a AST antes de aplicar reglas de permiso; lo que no parsea limpio requiere aprobación explícita; `eval` siempre requiere aprobación. La doc aclara: *"This is a permission gate, not a sandbox"*.
-- Los resultados de búsqueda web se resumen en vez de inyectarse crudos (mitigación de prompt injection).
-- `Options.sandbox` (`SandboxSettings`) para configurar el modo sandbox programáticamente.
+Other defenses already built into Claude Code:
+- Bash commands are parsed into an AST before permission rules apply; anything that doesn't parse cleanly requires explicit approval; `eval` always requires approval. The docs clarify: *"This is a permission gate, not a sandbox"*.
+- Web search results are summarized instead of injected raw (a prompt-injection mitigation).
+- `Options.sandbox` (`SandboxSettings`) to configure sandbox mode programmatically.
 
-Auth en hosting (literal):
-- **Entrante:** *"put authentication at a gateway in front of the agent container. The agent should receive pre-authenticated requests and should not be the component that validates user tokens."*
-- **Salientes de herramientas:** *"keep tool credentials out of the agent environment. Route outbound calls through a proxy that injects API keys after the request leaves the container."*
+Auth when hosting (verbatim):
+- **Inbound:** *"put authentication at a gateway in front of the agent container. The agent should receive pre-authenticated requests and should not be the component that validates user tokens."*
+- **Outbound tool calls:** *"keep tool credentials out of the agent environment. Route outbound calls through a proxy that injects API keys after the request leaves the container."*
 
 ---
 
-## 12. Lo mejor valorado en GitHub (búsqueda abierta)
+## 12. The best rated on GitHub (open search)
 
-Búsqueda hecha con la GitHub Search API el 2026-08-02, ordenada por estrellas, sobre 4 consultas distintas (`ai agent framework language:TypeScript`, `agent sdk typescript stars:>500 pushed:>2026-02-01`, `llm agent orchestration language:TypeScript stars:>1000`, `agents framework language:TypeScript stars:>2000 pushed:>2026-05-01`). Estrellas, licencia y último push verificados uno a uno vía `api.github.com/repos/...`; versiones npm vía `registry.npmjs.org`.
+Search done with the GitHub Search API on 2026-08-02, sorted by stars, over 4 different queries (`ai agent framework language:TypeScript`, `agent sdk typescript stars:>500 pushed:>2026-02-01`, `llm agent orchestration language:TypeScript stars:>1000`, `agents framework language:TypeScript stars:>2000 pushed:>2026-05-01`). Stars, license and last push verified one by one via `api.github.com/repos/...`; npm versions via `registry.npmjs.org`.
 
-| Repo | ★ | Licencia (GitHub / npm) | Último push | Issues abiertas | Paquete npm (latest, fecha) |
+| Repo | ★ | License (GitHub / npm) | Last push | Open issues | npm package (latest, date) |
 |---|---:|---|---|---:|---|
-| [mastra-ai/mastra](https://github.com/mastra-ai/mastra) | 26 826 | Other (npm `@mastra/core`: **Apache-2.0**) | 2026-08-02 | 594 | `@mastra/core` 1.55.0 (2026-07-30), engines **node >= 22.13** |
-| [vercel/ai](https://github.com/vercel/ai) (AI SDK) | 25 958 | Other (npm `ai`: **Apache-2.0**) | 2026-08-02 | 1 714 | `ai` 7.0.48 (2026-08-01), engines **node >= 22** |
-| [VoltAgent/voltagent](https://github.com/VoltAgent/voltagent) | 10 249 | **MIT** | 2026-07-13 | 79 | `@voltagent/core` 2.9.0 (2026-07-08) |
-| [genkit-ai/genkit](https://github.com/genkit-ai/genkit) | 6 309 | **Apache-2.0** | 2026-08-01 | 672 | (no verificado) |
-| [openai/openai-agents-js](https://github.com/openai/openai-agents-js) | 3 513 | **MIT** | 2026-08-02 | 33 | `@openai/agents` 0.14.2 (2026-08-01) |
-| [langchain-ai/langgraphjs](https://github.com/langchain-ai/langgraphjs) | 3 167 | **MIT** | 2026-08-01 | 96 | `@langchain/langgraph` 1.4.8 (2026-07-15) |
-| **anthropics/claude-agent-sdk-typescript** | **1 668** | **Ninguna OSS — Anthropic Commercial ToS** | 2026-07-25 | 176 | `@anthropic-ai/claude-agent-sdk` **0.3.220** (2026-07-24), engines node >= 18 |
-| [inkeep/agents](https://github.com/inkeep/agents) | 1 340 | Other | 2026-07-31 | 37 | (no verificado) |
+| [mastra-ai/mastra](https://github.com/mastra-ai/mastra) | 26,826 | Other (npm `@mastra/core`: **Apache-2.0**) | 2026-08-02 | 594 | `@mastra/core` 1.55.0 (2026-07-30), engines **node >= 22.13** |
+| [vercel/ai](https://github.com/vercel/ai) (AI SDK) | 25,958 | Other (npm `ai`: **Apache-2.0**) | 2026-08-02 | 1,714 | `ai` 7.0.48 (2026-08-01), engines **node >= 22** |
+| [VoltAgent/voltagent](https://github.com/VoltAgent/voltagent) | 10,249 | **MIT** | 2026-07-13 | 79 | `@voltagent/core` 2.9.0 (2026-07-08) |
+| [genkit-ai/genkit](https://github.com/genkit-ai/genkit) | 6,309 | **Apache-2.0** | 2026-08-01 | 672 | (not verified) |
+| [openai/openai-agents-js](https://github.com/openai/openai-agents-js) | 3,513 | **MIT** | 2026-08-02 | 33 | `@openai/agents` 0.14.2 (2026-08-01) |
+| [langchain-ai/langgraphjs](https://github.com/langchain-ai/langgraphjs) | 3,167 | **MIT** | 2026-08-01 | 96 | `@langchain/langgraph` 1.4.8 (2026-07-15) |
+| **anthropics/claude-agent-sdk-typescript** | **1,668** | **No OSS license — Anthropic Commercial ToS** | 2026-07-25 | 176 | `@anthropic-ai/claude-agent-sdk` **0.3.220** (2026-07-24), engines node >= 18 |
+| [inkeep/agents](https://github.com/inkeep/agents) | 1,340 | Other | 2026-07-31 | 37 | (not verified) |
 
-*(Nota: la búsqueda devolvió también repos con muchas estrellas que NO son frameworks de agentes comparables — `heygen-com/hyperframes`, `langgenius/dify`, `medusajs/medusa`, `elizaOS/eliza`, `humanlayer/12-factor-agents` (sin push desde 2025-09-21, muerto) — los he excluido de la tabla por no ser competencia directa del núcleo de agentes de APM.)*
+*(Note: the search also returned high-star repos that are NOT comparable agent frameworks — `heygen-com/hyperframes`, `langgenius/dify`, `medusajs/medusa`, `elizaOS/eliza`, `humanlayer/12-factor-agents` (no push since 2025-09-21, dead) — I left them out of the table as they're not direct competitors for APM's agent core.)*
 
-### ¿Cambia esto nuestra decisión?
+### Does this change our decision?
 
-**No. Recomiendo seguir con el Claude Agent SDK**, pero conviene ser honesto sobre lo que estamos aceptando y sobre un riesgo real.
+**No. I recommend staying with the Claude Agent SDK**, but it's worth being honest about what we're accepting and about one real risk.
 
-**Por qué gana el Claude Agent SDK para APM, pese a tener 15× menos estrellas:**
+**Why the Claude Agent SDK wins for APM despite having 15× fewer stars:**
 
-1. **Es lo único que trae el "harness" completo, no solo el bucle.** Mastra, VoltAgent, OpenAI Agents JS y LangGraph JS te dan orquestación, pero **tú tienes que construir** las herramientas de sistema de ficheros, el ejecutor de bash, el parseo de comandos a AST para permisos, la compactación de contexto, el checkpointing de archivos, los skills, y la persistencia de transcripts. El Agent SDK es literalmente Claude Code como librería: todo eso ya está y está probado a escala.
-2. **APM es un "agent command center"**, y todo lo que necesitamos (subagentes con contexto aislado, hooks de 31 eventos, `canUseTool` con aprobación humana, `defer` que sobrevive a reinicios, `SessionStore` externo, `modelUsage` por modelo, aislamiento multi-tenant documentado) está **especificado y soportado**. Ninguno de los otros documenta el patrón "aprobación humana que tarda minutos y el proceso puede morir" con la profundidad de la sección `defer`.
-3. **Cadencia de mantenimiento superior**: release npm casi diaria (5 versiones en 5 días). Mastra y Vercel AI también empujan a diario, pero VoltAgent lleva 3 semanas sin push y LangGraph JS publica cada ~2 semanas.
-4. Node **>= 18** (los otros grandes, Mastra y Vercel AI, exigen **Node >= 22**). Menos fricción con nuestra base actual.
+1. **It's the only one that ships the complete "harness", not just the loop.** Mastra, VoltAgent, OpenAI Agents JS and LangGraph JS give you orchestration, but **you have to build** the file-system tools, the bash executor, command parsing into an AST for permissions, context compaction, file checkpointing, skills and transcript persistence. The Agent SDK is literally Claude Code as a library: all of that is already there and tested at scale.
+2. **APM is an "agent command center"**, and everything we need (subagents with isolated context, hooks for 31 events, `canUseTool` with human approval, `defer` that survives restarts, an external `SessionStore`, per-model `modelUsage`, documented multi-tenant isolation) is **specified and supported**. None of the others documents the "human approval that takes minutes and the process may die" pattern as deeply as the `defer` section.
+3. **Superior maintenance cadence**: near-daily npm releases (5 versions in 5 days). Mastra and Vercel AI also push daily, but VoltAgent hasn't pushed in 3 weeks and LangGraph JS publishes every ~2 weeks.
+4. Node **>= 18** (the other big ones, Mastra and Vercel AI, require **Node >= 22**). Less friction with our current base.
 
-**Lo que estamos aceptando conscientemente (los contras, sin maquillar):**
+**What we're consciously accepting (the cons, unvarnished):**
 
-1. 🔴 **Licencia. Este es el punto que más debe pesar.** El repo `anthropics/claude-agent-sdk-typescript` **no tiene licencia OSS** (`license: None` en la API de GitHub; npm dice `"SEE LICENSE IN README.md"`). El README remite a los *Anthropic Commercial Terms of Service*, "including when you use it to power products and services that you make available to your own customers and end users". **Mastra, VoltAgent, OpenAI Agents JS, LangGraph JS y Genkit son todos Apache-2.0 o MIT.** Si APM se va a vender como SaaS a terceros, esto hay que leerlo con calma antes de comprometer la arquitectura. Yo no soy abogado y **no he evaluado** si los Commercial ToS permiten nuestro modelo de reventa — lo marco como riesgo abierto, no como bloqueante.
-2. 🔴 **Lock-in de proveedor.** El Agent SDK solo corre modelos Claude (directo, Bedrock, Vertex, Foundry). Mastra, Vercel AI SDK y LangGraph JS son multi-modelo. Si APM alguna vez necesita ofrecer GPT o Gemini, hay que reescribir el núcleo. Los demás lo dan gratis.
-3. 🟡 **Arquitectura de subproceso.** Un proceso `claude` por sesión, ~1 GiB RAM cada uno. Mastra/VoltAgent/LangGraph corren **in-process**, así que su densidad por VPS es muy superior. En una VPS modesta, esto limita la concurrencia real de APM de forma seria. Es el coste de tener el harness completo.
-4. 🟡 **`anthropics/claude-agent-sdk-demos` está desactualizado** (último push 2026-03-13, ~5 meses). No copiar patrones de ahí sin verificarlos contra la doc actual: la API ha cambiado bastante (p. ej. `Task` → `Agent`, subagentes en background por defecto).
+1. 🔴 **License. This is the point that should weigh the most.** The `anthropics/claude-agent-sdk-typescript` repo **has no OSS license** (`license: None` in the GitHub API; npm says `"SEE LICENSE IN README.md"`). The README points to the *Anthropic Commercial Terms of Service*, "including when you use it to power products and services that you make available to your own customers and end users". **Mastra, VoltAgent, OpenAI Agents JS, LangGraph JS and Genkit are all Apache-2.0 or MIT.** If APM is going to be sold as SaaS to third parties, this needs a careful read before committing the architecture. I'm not a lawyer and **I haven't assessed** whether the Commercial ToS allow our resale model — I mark it as an open risk, not a blocker.
+2. 🔴 **Vendor lock-in.** The Agent SDK only runs Claude models (direct, Bedrock, Vertex, Foundry). Mastra, the Vercel AI SDK and LangGraph JS are multi-model. If APM ever needs to offer GPT or Gemini, the core has to be rewritten. The others give it for free.
+3. 🟡 **Subprocess architecture.** One `claude` process per session, ~1 GiB RAM each. Mastra/VoltAgent/LangGraph run **in-process**, so their density per VPS is much higher. On a modest VPS this seriously limits APM's real concurrency. It's the cost of having the complete harness.
+4. 🟡 **`anthropics/claude-agent-sdk-demos` is out of date** (last push 2026-03-13, ~5 months). Don't copy patterns from there without checking them against the current docs: the API has changed quite a bit (e.g. `Task` → `Agent`, subagents in the background by default).
 
-**El único caso en que reconsideraría:** si el punto (1) resulta incompatible con vender APM a terceros, o si aparece el requisito de multi-modelo. En ese escenario **Mastra** (26,8 k ★, Apache-2.0, push diario, ecosistema de workflows/memoria/evals) sería el reemplazo más sensato, asumiendo que tendríamos que construir nosotros el harness de herramientas y permisos que hoy nos regala Anthropic. VoltAgent (MIT, 79 issues abiertas, muy limpio) es la alternativa más ligera si nos basta con orquestación.
+**The only case in which I'd reconsider:** if point (1) turns out incompatible with selling APM to third parties, or a multi-model requirement appears. In that scenario **Mastra** (26.8k ★, Apache-2.0, daily pushes, an ecosystem of workflows/memory/evals) would be the most sensible replacement, accepting that we'd have to build the tools-and-permissions harness Anthropic gives us today. VoltAgent (MIT, 79 open issues, very clean) is the lightest alternative if orchestration is enough.
 
 ---
 
-## 13. ⚠️ Correcciones a supuestos previos
+## 13. ⚠️ Corrections to earlier assumptions
 
-Cosas que la investigación previa daba por buenas y **no** lo son:
+Things the earlier research took as given that **aren't** true:
 
-| Supuesto anterior | Realidad verificada |
+| Earlier assumption | Verified reality |
 |---|---|
-| La doc del Agent SDK vive en `platform.claude.com/docs/en/agent-sdk/*` | **Redirige 307 a `code.claude.com/docs/en/agent-sdk/*`.** Hay que actualizar todos los enlaces. |
-| `AgentDefinition` tiene campos `instructions` y/o `systemPrompt` | **Falso.** Los campos obligatorios son `description` y `prompt`. No existe `instructions` ni `systemPrompt` en `AgentDefinition`. (Un resumen automático de la página de referencia me devolvió una versión inventada con `instructions`/`systemPrompt`; leyendo el `.md` crudo se ve que no existen. Cuidado: **fetchear estas páginas con un resumidor produce tipos falsos**.) |
-| `CanUseTool` recibe un objeto `CanUseToolRequest` con `tool_name`, `tool_use_id`, `raw_input` | **Falso.** La firma real son **3 argumentos posicionales**: `(toolName, input, options)`. |
-| `PermissionResult` usa `{ allowed: true }` / `{ ask: true }` | **Falso.** Usa `{ behavior: "allow", updatedInput?, updatedPermissions?, toolUseID? }` o `{ behavior: "deny", message, interrupt?, toolUseID? }`. |
-| `SDKResultMessage.usage` sirve para facturar | **Peligrosamente falso en APM.** `usage` **excluye** los tokens de subagentes. Para el árbol completo hay que usar `total_cost_usd` y `modelUsage`. |
-| Hay que instalar el CLI de Claude Code en la imagen Docker | **Falso.** El paquete npm trae un binario nativo por plataforma como *optionalDependency*. Instalarlo aparte solo hace falta si se saltan las optional deps. |
-| Node 20 o 22 mínimo | **Node >= 18.0.0** según `engines`. |
-| La herramienta de subagentes se llama `Task` | Renombrada a **`Agent`** en Claude Code v2.1.63. Pero `Task` **sigue apareciendo** en `system:init.tools` y en `permission_denials[].tool_name` → hay que comprobar ambas. |
-| Los subagentes corren en primer plano por defecto | Cambió en v2.1.198: **corren en background por defecto** si el modelo omite `run_in_background`. |
-| El aislamiento multi-tenant se logra con `settingSources: []` | **Insuficiente.** La *auto memory* de `~/.claude/projects/<project>/memory/` se carga **ignorando `settingSources`**. Hace falta además `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`, `CLAUDE_CONFIG_DIR` por tenant y `cwd` por tenant. |
-| `canUseTool` intercepta todas las llamadas a herramientas | **Falso.** Es el paso 6 de 6. Cualquier `allowedTools` "pelón", regla allow o modo `acceptEdits`/`bypassPermissions` lo cortocircuita. Para interceptar TODO hay que usar un hook `PreToolUse`. |
-| Existe algún timeout de aprobación | **No existe.** Las promesas de permiso no expiran nunca. Ni en `canUseTool` ni en `defer`. |
-| Las sesiones expiran solas | **No.** "No top-level session timeout". Hay que acotar con `maxTurns` y/o `maxBudgetUsd`. |
-| El repo `claude-agent-sdk-demos` es una referencia actual | Último push **2026-03-13**, ~5 meses de retraso. Sus patrones pueden estar obsoletos. |
-| El Agent SDK es open source | **No.** Sin licencia OSS; gobernado por los *Anthropic Commercial Terms of Service*. |
+| The Agent SDK docs live at `platform.claude.com/docs/en/agent-sdk/*` | **It 307-redirects to `code.claude.com/docs/en/agent-sdk/*`.** Every link needs updating. |
+| `AgentDefinition` has `instructions` and/or `systemPrompt` fields | **False.** The required fields are `description` and `prompt`. There's no `instructions` or `systemPrompt` in `AgentDefinition`. (An automatic summary of the reference page returned an invented version with `instructions`/`systemPrompt`; reading the raw `.md` shows they don't exist. Careful: **fetching these pages through a summarizer produces fake types**.) |
+| `CanUseTool` receives a `CanUseToolRequest` object with `tool_name`, `tool_use_id`, `raw_input` | **False.** The real signature is **3 positional arguments**: `(toolName, input, options)`. |
+| `PermissionResult` uses `{ allowed: true }` / `{ ask: true }` | **False.** It uses `{ behavior: "allow", updatedInput?, updatedPermissions?, toolUseID? }` or `{ behavior: "deny", message, interrupt?, toolUseID? }`. |
+| `SDKResultMessage.usage` is fine for billing | **Dangerously false in APM.** `usage` **excludes** subagent tokens. For the whole tree, use `total_cost_usd` and `modelUsage`. |
+| The Claude Code CLI must be installed in the Docker image | **False.** The npm package ships a native per-platform binary as an *optionalDependency*. A separate install is only needed if optional deps are skipped. |
+| Node 20 or 22 minimum | **Node >= 18.0.0** according to `engines`. |
+| The subagent tool is called `Task` | Renamed to **`Agent`** in Claude Code v2.1.63. But `Task` **still shows up** in `system:init.tools` and in `permission_denials[].tool_name` → check both. |
+| Subagents run in the foreground by default | Changed in v2.1.198: **they run in the background by default** if the model omits `run_in_background`. |
+| Multi-tenant isolation is achieved with `settingSources: []` | **Insufficient.** The *auto memory* in `~/.claude/projects/<project>/memory/` is loaded **ignoring `settingSources`**. You also need `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`, a per-tenant `CLAUDE_CONFIG_DIR` and a per-tenant `cwd`. |
+| `canUseTool` intercepts every tool call | **False.** It's step 6 of 6. Any bare `allowedTools` entry, allow rule or `acceptEdits`/`bypassPermissions` mode short-circuits it. To intercept EVERYTHING, use a `PreToolUse` hook. |
+| There's some approval timeout | **There isn't.** Permission promises never expire. Neither in `canUseTool` nor in `defer`. |
+| Sessions expire on their own | **No.** "No top-level session timeout". Bound them with `maxTurns` and/or `maxBudgetUsd`. |
+| The `claude-agent-sdk-demos` repo is a current reference | Last push **2026-03-13**, ~5 months behind. Its patterns may be obsolete. |
+| The Agent SDK is open source | **No.** No OSS license; governed by the *Anthropic Commercial Terms of Service*. |
 
 ---
 
-## 14. Riesgos e incógnitas (NO VERIFICADO)
+## 14. Risks and unknowns (NOT VERIFIED)
 
-1. **NO VERIFICADO — Licencia comercial y reventa.** No he leído los *Anthropic Commercial Terms of Service* completos. No puedo afirmar si APM puede facturar a terceros por uso del Agent SDK con nuestra API key, ni si cada tenant debe traer la suya. **Esto debe resolverse antes de comprometer la arquitectura.**
-2. **NO VERIFICADO — IDs de modelo válidos.** No descargué `/docs/en/model-config#available-models`. Sé que se aceptan los alias `fable`/`opus`/`sonnet`/`haiku`/`inherit` y "un ID completo", pero **no cito ningún ID concreto** para no inventarlo.
-3. **NO VERIFICADO — Dependencias de sistema del binario nativo.** Si `node:22-slim` o `node:22-alpine` necesitan paquetes extra (glibc, libstdc++, ca-certificates) para que el binario arranque. Hay que probarlo al construir la imagen.
-4. **NO VERIFICADO — Binarios auxiliares en el PATH.** Si las herramientas Grep/Glob/Bash del agente requieren `ripgrep`, `git` u otros instalados en el contenedor.
-5. **NO VERIFICADO — Correspondencia SDK 0.3.220 ⇄ Claude Code 2.1.220.** El patrón está documentado con el ejemplo v0.3.191 ⇒ v2.1.191; la extrapolación a 0.3.220 es inferencia mía. Se confirma en runtime leyendo `claude_code_version` del `SDKSystemMessage`.
-6. **NO VERIFICADO — Adaptadores `SessionStore` de referencia.** La doc menciona implementaciones de referencia para S3, Redis y Postgres, más una *conformance suite*, en `session-storage#reference-implementations`. No descargué ese apartado ni verifiqué si el código es copiable o solo descriptivo.
-7. **NO VERIFICADO — `SessionStore` + `defer` juntos.** No hay confirmación explícita de que una llamada diferida (`tool_deferred`) sobreviva a un reinicio de contenedor cuando el transcript está solo en el store externo y no en disco local. La doc dice que la sesión "remains on disk until you resume it". **Este es el punto de integración que hay que probar primero en un spike**, porque es la base del flujo de aprobación humana de APM.
-8. **NO VERIFICADO — Comportamiento de `canUseTool` bajo `reinitialize()` en producción.** La doc advierte que hay que hacerlo idempotente por `requestId`, pero no he probado el escenario de reconexión.
-9. **NO VERIFICADO — Consumo real de RAM.** El "1 GiB por agente" es el punto de partida oficial, explícitamente descrito como "a floor, not the ceiling". Hay que medir con nuestra carga real antes de dimensionar la VPS.
-10. **NO VERIFICADO — `hosting cookbook`.** `github.com/anthropics/claude-cookbooks/tree/main/claude_agent_sdk/hosting` supuestamente tiene Dockerfiles y manifiestos K8s desplegables. No lo he abierto; puede ahorrarnos trabajo en el Dockerfile.
-11. **NO VERIFICADO — Alternativas del punto 12 en profundidad.** Para Mastra, VoltAgent, OpenAI Agents JS y LangGraph JS solo verifiqué estrellas, licencia, último push, issues y versión npm. **No leí su documentación**, así que mis afirmaciones sobre sus capacidades (in-process, multi-modelo, falta de harness de herramientas) son conocimiento general, no verificación de esta sesión.
+1. **NOT VERIFIED — Commercial license and resale.** I haven't read the full *Anthropic Commercial Terms of Service*. I can't say whether APM may bill third parties for Agent SDK usage with our API key, or whether each tenant must bring their own. **This must be resolved before committing the architecture.**
+2. **NOT VERIFIED — Valid model IDs.** I didn't download `/docs/en/model-config#available-models`. I know the aliases `fable`/`opus`/`sonnet`/`haiku`/`inherit` and "a full ID" are accepted, but **I don't cite any specific ID** so as not to invent it.
+3. **NOT VERIFIED — The native binary's system dependencies.** Whether `node:22-slim` or `node:22-alpine` need extra packages (glibc, libstdc++, ca-certificates) for the binary to start. To be tested when building the image. (In practice `node:22-alpine` works — see `api/Dockerfile`.)
+4. **NOT VERIFIED — Auxiliary binaries on the PATH.** Whether the agent's Grep/Glob/Bash tools require `ripgrep`, `git` or others installed in the container.
+5. **NOT VERIFIED — SDK 0.3.220 ⇄ Claude Code 2.1.220 correspondence.** The pattern is documented with the example v0.3.191 ⇒ v2.1.191; extrapolating to 0.3.220 is my inference. It's confirmed at runtime by reading `claude_code_version` from the `SDKSystemMessage`.
+6. **NOT VERIFIED — Reference `SessionStore` adapters.** The docs mention reference implementations for S3, Redis and Postgres, plus a *conformance suite*, in `session-storage#reference-implementations`. I didn't download that section or check whether the code is copyable or only descriptive.
+7. **NOT VERIFIED — `SessionStore` + `defer` together.** There's no explicit confirmation that a deferred call (`tool_deferred`) survives a container restart when the transcript is only in the external store and not on local disk. The docs say the session "remains on disk until you resume it". **This is the integration point to test first in a spike**, because it's the basis of APM's human-approval flow. (Resolved: SPIKE-02 — it survives.)
+8. **NOT VERIFIED — `canUseTool` behavior under `reinitialize()` in production.** The docs warn it must be idempotent by `requestId`, but I haven't tested the reconnection scenario.
+9. **NOT VERIFIED — Real RAM usage.** The "1 GiB per agent" is the official starting point, explicitly described as "a floor, not the ceiling". Measure with our real load before sizing the VPS.
+10. **NOT VERIFIED — the hosting cookbook.** `github.com/anthropics/claude-cookbooks/tree/main/claude_agent_sdk/hosting` reportedly has deployable Dockerfiles and K8s manifests. I haven't opened it; it might save work on the Dockerfile.
+11. **NOT VERIFIED — The point-12 alternatives in depth.** For Mastra, VoltAgent, OpenAI Agents JS and LangGraph JS I only verified stars, license, last push, issues and npm version. **I didn't read their docs**, so my claims about their capabilities (in-process, multi-model, lack of a tool harness) are general knowledge, not verification from this session.

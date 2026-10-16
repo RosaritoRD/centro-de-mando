@@ -1,18 +1,18 @@
-/* tu empresa — APM · la herramienta con la que el agente del chat GUARDA leads.
+/* Acme — APM · the tool the chat agent uses to SAVE leads.
 
-   Por qué existe (26/09/2026): el agente buscó 29 clínicas dentales en NJ, las
-   devolvió como una tabla bonita en el chat… y ahí se quedaron. Nada las
-   pasaba a `lead`, así que la pestaña Leads no tenía la sección ni la cola de
-   llamadas tenía a quién llamar. Hubo que importarlas a mano.
+   Why it exists (26/09/2026): the agent found 29 dental clinics in NJ, returned
+   them as a nice table in the chat… and there they stayed. Nothing moved them
+   into `lead`, so the Leads tab had no section and the call queue had nobody
+   to call. They had to be imported by hand.
 
-   Ahora el agente tiene `guardar_leads` y el system prompt le dice que la use
-   siempre que encuentre negocios con teléfono. Entra por el MISMO camino que
-   las otras fuentes (`guardarLeads` del repo): deduplica por teléfono, une con
-   lo que ya había y respeta la lista de supresión (no llamar).
+   Now the agent has `guardar_leads` and the system prompt tells it to use it
+   whenever it finds businesses with a phone number. It goes down the SAME path
+   as the other sources (the repo's `guardarLeads`): dedupes by phone, merges
+   with what was already there and respects the suppression (do-not-call) list.
 
-   Sin aprobación humana a propósito: guardar un lead no llama a nadie ni sale
-   de la casa, y un lead de más se descarta desde la pestaña. Pedir permiso por
-   cada lote convertiría "busca clínicas" en una cola de botones. */
+   No human approval on purpose: saving a lead calls nobody and never leaves
+   the house, and an extra lead can be dismissed from the tab. Asking
+   permission for every batch would turn "find clinics" into a queue of buttons. */
 
 import { z } from 'zod';
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
@@ -23,25 +23,25 @@ export const FUENTE = 'apm_agent';
 const NICHO = /^[a-z0-9_]{2,60}$/;
 const MAX_LOTE = 200;
 
-/* "Clínicas dentales" → "clinicas_dentales". El nicho es la sección de la
-   pestaña Leads: si el modelo manda "Dental Clinics" y otro día "dental
-   clinic", salen dos secciones. Se normaliza aquí y el prompt pide inglés en
-   singular. */
+/* "Clínicas dentales" → "clinicas_dentales". The niche is the Leads tab
+   section: if the model sends "Dental Clinics" one day and "dental clinic"
+   another, you get two sections. It's normalized here and the prompt asks for
+   English, singular. */
 export function normalizaNicho(n) {
   return String(n || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
 }
 
-/* Lo que manda el modelo → leads listos para `guardarLeads`. Puro y probado. */
+/* What the model sends → leads ready for `guardarLeads`. Pure and tested. */
 export function preparaLeads({ niche, leads, runId }) {
   const nicho = normalizaNicho(niche);
-  if (!NICHO.test(nicho)) return { error: 'nicho no válido: usa algo como dental_clinic' };
+  if (!NICHO.test(nicho)) return { error: 'invalid niche: use something like dental_clinic' };
   const filas = Array.isArray(leads) ? leads.slice(0, MAX_LOTE) : [];
   const lote = normalizarLote(filas, (l) => ({
     businessName: nombreBonito(l.name || l.business_name || ''),
     phone: l.phone,
-    /* "hudsonfamilydentalnj.com" sin esquema se completa; lo que no tenga
-       forma de dominio se deja tal cual y webSegura lo descarta. */
+    /* "hudsonfamilydentalnj.com" without a scheme gets completed; anything
+       not shaped like a domain is left as-is and webSegura drops it. */
     website: /^[a-z0-9.-]+\.[a-z]{2,}(\/\S*)?$/i.test(String(l.website || '').trim())
       ? `https://${String(l.website).trim()}` : l.website,
     address: l.address ? String(l.address).trim().slice(0, 300) : null,
@@ -54,43 +54,43 @@ export function preparaLeads({ niche, leads, runId }) {
   return { nicho, ...lote };
 }
 
-/* El servidor MCP en proceso, uno por ejecución (lleva el id del run para
-   que cada lead sepa de qué conversación salió). */
-export function servidorDeLeads({ repo, tenant = 'principal', runId }) {
+/* The in-process MCP server, one per run (it carries the run id so each lead
+   knows which conversation it came from). */
+export function servidorDeLeads({ repo, tenant = 'main', runId }) {
   return createSdkMcpServer({
     name: 'apm',
     version: '1.0.0',
     tools: [tool(
       'guardar_leads',
-      'Guarda en la pestaña Leads de APM los negocios que encontraste, para llamarlos después. '
-        + 'Úsala SIEMPRE que tu respuesta incluya negocios con teléfono, antes de responder. '
-        + 'niche: en inglés, singular, snake_case (dental_clinic, restaurant, barbershop). '
-        + 'Omite cadenas y franquicias grandes. Devuelve cuántos entraron nuevos y cuántos ya existían.',
+      "Saves the businesses you found into APM's Leads tab, to call them later. "
+        + 'ALWAYS use it when your reply includes businesses with a phone number, before replying. '
+        + 'niche: English, singular, snake_case (dental_clinic, restaurant, barbershop). '
+        + 'Leave out chains and big franchises. Returns how many were new and how many already existed.',
       {
-        niche: z.string().describe('Sección en snake_case, inglés, singular. Ej: dental_clinic'),
+        niche: z.string().describe('Section in snake_case, English, singular. E.g. dental_clinic'),
         leads: z.array(z.object({
           name: z.string(),
-          phone: z.string().describe('Teléfono de EE. UU.'),
+          phone: z.string().describe('US phone number'),
           website: z.string().optional(),
           address: z.string().optional(),
           city: z.string().optional(),
-          state: z.string().optional().describe('Dos letras, ej: NJ'),
+          state: z.string().optional().describe('Two letters, e.g. NJ'),
           zip: z.string().optional()
         })).max(MAX_LOTE)
       },
       async (args) => {
         const p = preparaLeads({ niche: args.niche, leads: args.leads, runId });
-        if (p.error) return { content: [{ type: 'text', text: `No guardé nada: ${p.error}` }], isError: true };
+        if (p.error) return { content: [{ type: 'text', text: `Nothing saved: ${p.error}` }], isError: true };
         const id = await repo.crearRun({ tenant, source: FUENTE, niche: p.nicho, params: { run: runId } });
         try {
           const g = await repo.guardarLeads({ tenant, niche: p.nicho, source: FUENTE, leads: p.leads });
           await repo.terminarRun(id, { status: 'done', found: p.found, invalid: p.invalid, ...g });
           return { content: [{ type: 'text', text:
-            `Guardados en Leads → sección "${p.nicho}": ${g.inserted} nuevos, ${g.merged} ya existían, `
-            + `${g.suppressed} en la lista de no llamar, ${p.invalid} sin teléfono válido.` }] };
+            `Saved to Leads → section "${p.nicho}": ${g.inserted} new, ${g.merged} already existed, `
+            + `${g.suppressed} on the do-not-call list, ${p.invalid} without a valid phone.` }] };
         } catch (e) {
           await repo.terminarRun(id, { status: 'failed', error: e.message }).catch(() => {});
-          return { content: [{ type: 'text', text: `No pude guardar los leads: ${e.message}` }], isError: true };
+          return { content: [{ type: 'text', text: `Could not save the leads: ${e.message}` }], isError: true };
         }
       }
     )]

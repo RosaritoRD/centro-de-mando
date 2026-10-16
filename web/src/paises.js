@@ -1,17 +1,19 @@
-/* Países ISO 3166-1 alfa-2.
+/* ISO 3166-1 alpha-2 countries.
 
-   GENERADO, no escrito a mano: sale de /usr/share/zoneinfo/iso3166.tab, que
-   es de dominio público y viene con el sistema. Teclear 249 códigos a mano
-   habría metido erratas que solo se ven el día que alguien busca leads en el
-   país equivocado.
+   GENERATED, not hand-written: it comes from /usr/share/zoneinfo/iso3166.tab,
+   which is public domain and ships with the system. Typing 249 codes by hand
+   would have introduced typos that only show up the day someone searches for
+   leads in the wrong country.
 
-   El nombre en inglés que va aquí es solo el respaldo. Lo que se pinta lo
-   traduce el navegador con Intl.DisplayNames en español, así que no hay que
-   mantener 249 traducciones ni se queda ninguna a medias.
+   The English name here is only the fallback. What gets displayed is
+   translated by the browser with Intl.DisplayNames in the interface language,
+   so there are no 249 translations to maintain or leave half-done.
 
-   Regenerar (si algún día cambia la tabla del sistema):
+   Regenerate (if the system table ever changes):
      awk -F'\t' '!/^#/ && NF==2 {printf "  [\"%s\", \"%s\"],\n", $1, $2}' \
        /usr/share/zoneinfo/iso3166.tab */
+
+import { LOCALE } from './i18n.js';
 
 const TABLA = [
   ["AD", "Andorra"],
@@ -265,12 +267,12 @@ const TABLA = [
   ["ZW", "Zimbabwe"],
 ];
 
-/* Los que se usan de verdad, arriba del todo. El resto de la lista sigue
-   entera debajo: esto ahorra scroll, no quita opciones. */
+/* The ones actually used, at the very top. The rest of the list stays whole
+   below: this saves scrolling, it doesn't remove options. */
 export const FRECUENTES = ['US', 'DO', 'PR', 'CA', 'MX', 'ES'];
 
 const nombres = (() => {
-  try { return new Intl.DisplayNames(['es'], { type: 'region' }); }
+  try { return new Intl.DisplayNames([LOCALE], { type: 'region' }); }
   catch { return null; }
 })();
 
@@ -281,9 +283,8 @@ export function nombrePais(codigo) {
   catch { return respaldo?.[1] || codigo; }
 }
 
-/* Ordenada por el nombre traducido y no por el código: una lista alfabética
-   en inglés dentro de una interfaz en español no se puede recorrer con la
-   vista. */
+/* Sorted by the translated name, not the code: an English alphabetical list
+   inside a Spanish interface can't be scanned by eye. */
 export const PAISES = TABLA
   .map(([c]) => ({ code: c, name: nombrePais(c) }))
-  .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  .sort((a, b) => a.name.localeCompare(b.name, LOCALE));

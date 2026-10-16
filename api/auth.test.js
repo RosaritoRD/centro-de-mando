@@ -1,22 +1,22 @@
-/* APM es de una persona. Este archivo es el que lo garantiza.
+/* APM belongs to one person. This file is what guarantees it.
 
-   La parte interesante no es "el UID permitido entra" —eso es lo fácil— sino
-   los dos modos de fallar en abierto:
+   The interesting part isn't "the allowed UID gets in" — that's the easy bit —
+   but the two ways of failing open:
 
-   1. La allowlist vacía. Si APM_ALLOWED_UIDS no se cargó (typo en el .env, el
-      env_file que no se montó, un despliegue a medias), un `allowlist.has()`
-      sobre un Set vacío devuelve false y parecería que estamos a salvo... pero
-      solo si alguien se acordó de comprobar el caso. Si en su lugar hubiéramos
-      escrito "si no hay allowlist, no filtres" —que es la forma cómoda de que
-      funcione en local— el centro de mando quedaría abierto a cualquier cuenta
-      de tu-dominio.com sin un solo error en los logs.
+   1. The empty allowlist. If APM_ALLOWED_UIDS didn't load (a typo in the .env,
+      an env_file that wasn't mounted, a half-finished deploy), `allowlist.has()`
+      on an empty Set returns false and it looks like we're safe... but only if
+      someone remembered to check that case. Had we written "no allowlist, don't
+      filter" instead — the convenient way to make it work locally — the command
+      center would be open to any your-domain.com account without a single error
+      in the logs.
 
-   2. Confundir 401 con 403. No es cosmético: 401 manda a la pantalla de
-      identificarse, y si se devuelve 401 a alguien que SÍ tiene sesión pero no
-      está en la lista, lo mandamos a un login que va a superar, para volver a
-      rebotar. Un bucle, que es justo la trampa que ya costó un bug en el panel.
+   2. Mixing up 401 and 403. It's not cosmetic: 401 sends you to the sign-in
+      screen, and returning 401 to someone who DOES have a session but isn't on
+      the list sends them to a login they'll pass, only to bounce again. A loop —
+      exactly the trap that already cost a bug in the dashboard.
 
-   Correr:  node --test auth.test.js  */
+   Run:  node --test auth.test.js  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,56 +25,56 @@ import { decidirAcceso, parseAllowlist, sessionCookie } from './auth.js';
 const DUENO = 'lx7jnsBAPNPnwDIrFfbf73em2GJ2';
 const OTRO = 'eUUhymJcDiOfeoeRC4mxCeixCy53';
 
-test('el UID de la lista entra', () => {
+test('the listed UID gets in', () => {
   const r = decidirAcceso({ uid: DUENO, email: 'e@x.com' }, parseAllowlist(DUENO));
   assert.equal(r.ok, true);
   assert.equal(r.uid, DUENO);
 });
 
-test('una cuenta válida que no está en la lista recibe 403, no 401', () => {
+test('a valid account that is not on the list gets 403, not 401', () => {
   const r = decidirAcceso({ uid: OTRO }, parseAllowlist(DUENO));
   assert.equal(r.ok, false);
-  assert.equal(r.status, 403, '403 = sé quién eres y no eres tú; 401 lo mandaría a un login que va a superar');
+  assert.equal(r.status, 403, "403 = I know who you are and you're not the one; 401 would send them to a login they'd pass");
   assert.equal(r.code, 'not_allowed');
 });
 
-test('sin sesión es 401, para que la pantalla mande a identificarse', () => {
+test('no session is 401, so the screen sends you to sign in', () => {
   const r = decidirAcceso(null, parseAllowlist(DUENO));
   assert.equal(r.status, 401);
   assert.equal(r.code, 'no_session');
 });
 
-test('allowlist vacía cierra la puerta, no la abre', () => {
-  /* El caso que importa: la variable no se cargó. Nadie entra, ni siquiera
-     el dueño. Prefiero que el dueño no pueda entrar y lo diga a que entre
-     cualquiera y no lo diga nadie. */
+test('an empty allowlist shuts the door, it does not open it', () => {
+  /* The case that matters: the variable didn't load. Nobody gets in, not even
+     the owner. Better that the owner can't get in and says so than that anyone
+     gets in and nobody says a thing. */
   for (const raw of ['', undefined, null, '   ', ',,,']) {
     const r = decidirAcceso({ uid: DUENO }, parseAllowlist(raw));
-    assert.equal(r.ok, false, `con APM_ALLOWED_UIDS=${JSON.stringify(raw)} no puede entrar nadie`);
+    assert.equal(r.ok, false, `with APM_ALLOWED_UIDS=${JSON.stringify(raw)} nobody may get in`);
     assert.equal(r.code, 'allowlist_empty');
   }
 });
 
-test('la allowlist tolera espacios y comas de más', () => {
+test('the allowlist tolerates extra spaces and commas', () => {
   const lista = parseAllowlist(` ${DUENO} , , ${OTRO} `);
   assert.equal(lista.size, 2);
   assert.ok(lista.has(DUENO) && lista.has(OTRO));
 });
 
-test('un usuario sin uid no pasa aunque el objeto exista', () => {
-  /* Un verifyIdToken que devuelve algo raro no puede colarse por tener forma
-     de objeto. */
+test('a user without a uid does not pass even if the object exists', () => {
+  /* A verifyIdToken that returns something odd can't sneak in just by being
+     shaped like an object. */
   for (const u of [{}, { uid: '' }, { email: 'x@y.com' }]) {
     assert.equal(decidirAcceso(u, parseAllowlist(DUENO)).ok, false);
   }
 });
 
-test('la cookie __session se lee entre otras cookies', () => {
+test('the __session cookie is read among other cookies', () => {
   const req = { headers: { cookie: 'foo=1; __session=abc%20def; bar=2' } };
   assert.equal(sessionCookie(req), 'abc def');
 });
 
-test('sin cookie devuelve cadena vacía, no revienta', () => {
+test('no cookie returns an empty string, it does not crash', () => {
   assert.equal(sessionCookie({ headers: {} }), '');
-  assert.equal(sessionCookie({ headers: { cookie: 'otra=1' } }), '');
+  assert.equal(sessionCookie({ headers: { cookie: 'other=1' } }), '');
 });

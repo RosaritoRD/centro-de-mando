@@ -1,36 +1,36 @@
-/* tu empresa — APM · ubicación de la consulta y de los leads.
+/* Acme — APM · where queries come from and where leads are searched.
 
-   Dos ubicaciones y no una, porque son dos preguntas distintas:
+   Two locations, not one, because they're two different questions:
 
-   - `base`   → desde dónde se consulta. Es el contexto de quien pregunta:
-                huso horario, mercado, qué leyes aplican.
-   - `target` → dónde hay que buscar los clientes potenciales. Puede estar a
-                mil kilómetros de la base y muchas veces lo está.
+   - `base`   → where you're asking from. The asker's context: time zone,
+                market, which laws apply.
+   - `target` → where to look for prospects. It can be a thousand kilometers
+                from the base, and often is.
 
-   Sin esto, un "búscame DSPs" devuelve lo que el modelo suponga — y lo que
-   supone es California o Londres. El coste de equivocarse no es un error:
-   es una lista de leads inútil que parece buena.
+   Without this, "find me DSPs" returns whatever the model assumes — and it
+   assumes California or London. The cost of getting it wrong isn't an error:
+   it's a useless lead list that looks good.
 
-   Este archivo no toca la base de datos ni Express a propósito: es lógica
-   pura para poder probarla con `node --test` sin levantar nada. */
+   This file deliberately doesn't touch the database or Express: it's pure
+   logic so it can be tested with `node --test` without starting anything. */
 
-/* Alfa-2 de ISO 3166-1. Se valida la FORMA, no la existencia del país: la
-   lista viva está en el navegador (web/src/paises.js, generada del
-   /usr/share/zoneinfo/iso3166.tab del sistema) y duplicar aquí 250 códigos
-   sería garantizar que un día las dos listas no coincidan. Un código con
-   forma válida pero inexistente no rompe nada: viaja al prompt como texto. */
+/* ISO 3166-1 alpha-2. The SHAPE is validated, not whether the country
+   exists: the live list is in the browser (web/src/paises.js, generated from
+   the system's /usr/share/zoneinfo/iso3166.tab), and duplicating 250 codes
+   here would guarantee the two lists drift apart one day. A well-formed but
+   nonexistent code breaks nothing: it travels into the prompt as text. */
 const ALFA2 = /^[A-Za-z]{2}$/;
 
-/* Las ciudades se escriben a mano ("Bronx, NY" o "Newark"), así que el tope
-   es generoso pero existe: sin él, el campo es una vía para inyectar 20 KB
-   de texto en el system prompt de cada ejecución. */
+/* Cities are typed by hand ("Bronx, NY" or "Newark"), so the cap is generous
+   but real: without it, the field is a way to inject 20 KB of text into every
+   run's system prompt. */
 const MAX_CIUDAD = 80;
 
 function limpiar(v) {
   if (typeof v !== 'string') return null;
-  /* Los saltos de línea se aplastan: el valor termina en una frase del
-     system prompt, y un "\n\nOlvida lo anterior" escrito en el campo ciudad
-     no debe poder empezar una línea nueva ahí dentro. */
+  /* Line breaks are flattened: the value ends up inside a system prompt
+     sentence, and a "\n\nIgnore the above" typed into the city field must
+     not be able to start a new line in there. */
   const s = v.replace(/[\r\n\t]+/g, ' ').trim().slice(0, MAX_CIUDAD);
   return s || null;
 }
@@ -41,8 +41,8 @@ function pais(v) {
   return ALFA2.test(s) ? s.toUpperCase() : null;
 }
 
-/* Deja siempre las cuatro claves, con null donde no hay dato. Un objeto con
-   forma constante ahorra comprobaciones en la ruta, en la UI y en el SQL. */
+/* Always returns all four keys, with null where there's no data. An object
+   with a constant shape saves checks in the route, the UI and the SQL. */
 export function normalizarUbicacion(entrada) {
   const e = entrada || {};
   const b = e.base || {};
@@ -57,13 +57,13 @@ export function ubicacionVacia(u) {
   return !u || (!u.base.city && !u.base.country && !u.target.city && !u.target.country);
 }
 
-/* La ubicación efectiva de una ejecución: lo que mandó el chat, y lo que no
-   venga, lo guardado como predeterminado.
+/* A run's effective location: whatever the chat sent, and for anything
+   missing, the saved default.
 
-   ⚠️ El destino cae en la base cuando está vacío, y no al revés. "Busca
-   leads" sin decir dónde significa "donde estoy"; "estoy" sin decir dónde no
-   significa "donde busco" — un contable en Nueva York que busca clientes en
-   Miami no está en Miami. */
+   ⚠️ The target falls back to the base when empty, not the other way round.
+   "Find leads" without saying where means "where I am"; "I am" without saying
+   where doesn't mean "where I search" — an accountant in New York looking for
+   clients in Miami isn't in Miami. */
 export function ubicacionEfectiva(delChat, guardada) {
   const a = normalizarUbicacion(delChat);
   const b = normalizarUbicacion(guardada);
@@ -78,14 +78,14 @@ export function ubicacionEfectiva(delChat, guardada) {
   return { base, target };
 }
 
-/* Nombre del país en español a partir del código. Node trae ICU completo
-   (verificado en el contenedor: 'DO' → 'República Dominicana'), pero si un
-   día se compila sin él, esto devuelve el código en vez de reventar el
-   arranque de una ejecución. */
+/* Country name from its code, in English (the system prompt is English).
+   Node ships full ICU (verified in the container: 'DO' → 'Dominican
+   Republic'), but if it's ever built without it, this returns the code instead
+   of crashing a run's startup. */
 export function nombrePais(codigo) {
   if (!codigo) return null;
   try {
-    return new Intl.DisplayNames(['es'], { type: 'region' }).of(codigo) || codigo;
+    return new Intl.DisplayNames(['en'], { type: 'region' }).of(codigo) || codigo;
   } catch {
     return codigo;
   }
@@ -98,27 +98,27 @@ export function comoTexto(sitio) {
   return sitio.city || p;
 }
 
-/* Las frases que se le añaden al system prompt. Solo se dice lo que se sabe:
-   una línea "busca en null" es peor que no decir nada, porque el modelo la
-   obedece igual. */
+/* The sentences added to the system prompt. Only what's known is said: a
+   "search in null" line is worse than saying nothing, because the model obeys
+   it anyway. */
 export function lineasDeUbicacion(u) {
   const base = comoTexto(u.base);
   const target = comoTexto(u.target);
   const l = [];
-  if (base) l.push(`el dueño te consulta desde ${base}: esa es su zona horaria y su mercado.`);
+  if (base) l.push(`the owner is asking from ${base}: that is his time zone and his market.`);
   if (target) {
-    l.push(`Cuando busques clientes potenciales, negocios, competencia o precios,`
-      + ` céntrate en ${target}.`);
-    /* La instrucción que evita el fallo caro: una lista de leads de otra
-       ciudad no se distingue de una buena hasta que se llama por teléfono. */
-    l.push('Si no puedes acotar una búsqueda a esa zona, dilo en la respuesta en vez de'
-      + ' devolver resultados de otro sitio como si valieran.');
+    l.push(`When you look for prospects, businesses, competitors or prices,`
+      + ` focus on ${target}.`);
+    /* The instruction that prevents the expensive mistake: a lead list from
+       another city looks just like a good one until you start calling. */
+    l.push("If you can't narrow a search to that area, say so in your reply instead of"
+      + ' returning results from somewhere else as if they counted.');
   }
   return l;
 }
 
-/* De columnas de `run` al objeto, y al revés. Las dos direcciones viven
-   juntas para que añadir un campo no se olvide en una de las dos. */
+/* From `run` columns to the object, and back. Both directions live together
+   so adding a field isn't forgotten in one of them. */
 export function desdeFilaRun(row) {
   return normalizarUbicacion({
     base:   { city: row?.base_city,   country: row?.base_country },

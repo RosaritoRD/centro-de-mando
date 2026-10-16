@@ -1,29 +1,29 @@
-# FASE 3 — ¿sirve el censo FMCSA como fuente de leads de DSP?
+# PHASE 3 — is the FMCSA census usable as a source of DSP leads?
 
-**Fecha:** 2026-08-03 · Investiga el **riesgo 5** de `RESEARCH.md` §7
-("cobertura real de DSP en el censo FMCSA sin comprobar") · **Coste:** $0
+**Date:** 2026-08-03 · Investigates **risk 5** in `RESEARCH.md` §7
+("real DSP coverage in the FMCSA census unverified") · **Cost:** $0
 
 ---
 
-## Veredicto corto
+## Short verdict
 
-> **La fuente es buena. El filtro que suponíamos, no.**
+> **The source is good. The filter we assumed is not.**
 >
-> El censo es gratis, legal, consultable por API y cubre el universo de
-> transportistas. Pero **sus campos no permiten identificar a un DSP de
-> Amazon**. Filtrar por tamaño de flota y antigüedad reduce mucho el ruido y
-> aun así lo que queda son empresas de riego, excavación y mecánica.
+> The census is free, legal, queryable by API and covers the whole universe of
+> carriers. But **its fields can't identify an Amazon DSP**. Filtering by fleet
+> size and age removes a lot of noise, and what's left is still irrigation,
+> excavation and mechanical companies.
 
-Esto **no** invalida la decisión de `RESEARCH.md` §8 de cambiar Google Maps
-por el censo — Google Places sigue prohibiendo almacenar su contenido. Lo que
-cambia es que **el enriquecimiento deja de ser un extra y pasa a ser la pieza
-que hace el trabajo**.
+This does **not** invalidate the decision in `RESEARCH.md` §8 to swap Google
+Maps for the census — Google Places still forbids storing its content. What
+changes is that **enrichment stops being an extra and becomes the piece that
+does the work**.
 
 ---
 
-## Lo bueno: no hay que descargar nada
+## The good part: nothing has to be downloaded
 
-El dataset está en Socrata y acepta filtros **en el servidor**:
+The dataset lives on Socrata and accepts **server-side** filters:
 
 ```
 https://data.transportation.gov/resource/az4n-8mr2.json
@@ -31,29 +31,30 @@ https://data.transportation.gov/resource/az4n-8mr2.json
   &$where=phy_state='NJ' AND status_code='A'
 ```
 
-Importa en una VPS que ya toca swap: **el fichero completo nunca baja**. Se
-piden conteos y páginas concretas. Descartado el miedo a un CSV de cientos de
-megas.
+It matters on a VPS that already touches swap: **the full file never comes
+down**. You ask for counts and specific pages. The fear of a multi-hundred-MB
+CSV is gone.
 
-⚠️ Detalle que cuesta media hora si no se sabe: **`power_units` es TEXTO** en
-el dataset. Un `BETWEEN 10 AND 60` falla con `query.soql.type-mismatch`. Hay
-que castear: `(power_units::number) between 10 and 60`.
+⚠️ A detail that costs half an hour if you don't know it: **`power_units` is
+TEXT** in the dataset. A `BETWEEN 10 AND 60` fails with
+`query.soql.type-mismatch`. You have to cast:
+`(power_units::number) between 10 and 60`.
 
-## El embudo, medido en Nueva Jersey
+## The funnel, measured in New Jersey
 
-| Filtro | Resultado |
+| Filter | Result |
 |---|---|
-| Todos los transportistas | 130.098 |
-| Activos (`status_code='A'`) | 49.286 |
-| Activos + alta desde 2018 | 30.337 |
-| Activos + flota 10-60 | 2.486 |
-| Activos + desde 2018 + flota 15-45 | **405** |
+| All carriers | 130,098 |
+| Active (`status_code='A'`) | 49,286 |
+| Active + registered since 2018 | 30,337 |
+| Active + fleet 10-60 | 2,486 |
+| Active + since 2018 + fleet 15-45 | **405** |
 
-De 130.098 a 405 con tres condiciones. El embudo funciona.
+From 130,098 to 405 with three conditions. The funnel works.
 
-## Lo malo: los 405 no son DSP
+## The bad part: the 405 aren't DSPs
 
-Muestra real del filtro más fino:
+A real sample from the finest filter:
 
 ```
 TBI UNLIMITED LLC              BRIDGETON     19
@@ -64,79 +65,78 @@ OVER THE EDGE EXCAVATING LLC   RIVERDALE     18
 GE MECHANICAL LLC              VINELAND      24
 ```
 
-Riego, excavación, mecánica. Son empresas con furgonetas, no empresas de
-reparto. El censo **no tiene ningún campo que diga "DSP de Amazon"**, y el
-tamaño de flota no distingue a quien reparte paquetes de quien lleva
-herramienta a una obra.
+Irrigation, excavation, mechanical. Companies with vans, not delivery
+companies. The census **has no field that says "Amazon DSP"**, and fleet size
+doesn't tell someone delivering parcels apart from someone taking tools to a job
+site.
 
-## COMPROBADO: la hipótesis se confirma. El censo NO sirve
+## VERIFIED: the hypothesis holds. The census does NOT work
 
-**2026-08-03, con tres DSP reales que el dueño conoce.** Este es el resultado que
-cierra la pregunta:
+**2026-08-03, with three real DSPs known to the owner.** This is the result that
+closes the question:
 
-| DSP | ¿Está en el censo? |
+| DSP | In the census? |
 |---|---|
-| **Una empresa conocida de ejemplo** | ❌ No aparece en la fuente |
-| **Acme Logistics LLC** | ⚠️ Hay uno en Montclair, NJ (DOT 0000000) con **0 unidades** |
-| **Example Logistics NYC** | ❌ No existe. Los "Example" son fuegos artificiales y energía |
+| **DSP A** | ❌ Doesn't exist. No match anywhere in the country |
+| **DSP B** | ⚠️ There's one in New Jersey with **0 units** |
+| **DSP C** | ❌ Doesn't exist. The name matches only fireworks and energy companies |
 
-**Dos de tres no están registrados.** Y el único que aparece declara cero
-furgonetas, así que **el filtro de flota 15-45 lo habría descartado también**.
-El embudo de 130.098 → 405 que parecía funcionar habría dejado fuera a los tres.
+**Two out of three aren't registered.** And the only one that shows up declares
+zero vans, so **the 15-45 fleet filter would have dropped it too**. The
+130,098 → 405 funnel that seemed to work would have left out all three.
 
-Queda confirmado el motivo que se sospechaba: las furgonetas de un DSP van por
-debajo de las 10.001 lb y **no necesitan número USDOT**. El censo no los
-infra-representa: no los contiene.
+The suspected reason is confirmed: a DSP's vans are under 10,001 lb and **don't
+need a USDOT number**. The census doesn't under-represent them: it doesn't
+contain them.
 
-### Consecuencia
+### Consequence
 
-**El censo FMCSA queda descartado como fuente de leads de DSP.** No por legal
-ni por coste —sigue siendo gratis y público— sino porque el nicho no está
-dentro. Sirve para transportistas de camión; los DSP de última milla no son eso.
+**The FMCSA census is ruled out as a source of DSP leads.** Not for legal or
+cost reasons — it's still free and public — but because the niche isn't in it.
+It works for truck carriers; last-mile DSPs aren't that.
 
-### Por dónde ir ahora (a decidir con el dueño)
+### Where to go next (to be decided with the owner)
 
-La señal que sí distingue a un DSP de cualquier otra empresa con furgonetas es
-**que contrata repartidores sin parar**. Un DSP vive de rotación de conductores
-y publica ofertas de forma continua. Eso es observable y público.
+The signal that does set a DSP apart from any other company with vans is **that
+it hires drivers non-stop**. A DSP lives on driver turnover and posts openings
+continuously. That's observable and public.
 
-| Vía | A favor | En contra |
+| Route | For | Against |
 |---|---|---|
-| **Ofertas de empleo** (Indeed, ZipRecruiter: "Delivery Associate" + ciudad) | Señal específica del nicho, pública, y da nombre + ciudad + a veces teléfono | Hay que revisar ToS de cada portal antes de tocar nada |
-| **Registro mercantil estatal** (NJ Division of Revenue, NY DOS) | Público, gratis, oficial | No marca el sector: mismo problema que el censo |
-| **Amazon Logistics / directorio DSP** | La fuente auténtica | No es público |
+| **Job postings** (Indeed, ZipRecruiter: "Delivery Associate" + city) | Niche-specific signal, public, and gives name + city + sometimes phone | Each portal's ToS must be reviewed before touching anything |
+| **State business registry** (NJ Division of Revenue, NY DOS) | Public, free, official | Doesn't flag the industry: same problem as the census |
+| **Amazon Logistics / DSP directory** | The authentic source | Not public |
 
-Recomendación: explorar la vía de ofertas de empleo, **con revisión de ToS
-antes de escribir una sola línea de scraper** — es el error que ya se evitó
-con Google Places.
+Recommendation: explore the job-postings route, **with a ToS review before
+writing a single line of scraper** — the mistake already avoided with Google
+Places.
 
 ---
 
-## La hipótesis original (así se formuló, antes de comprobarla)
+## The original hypothesis (as stated before checking it)
 
-⚠️ **No es un hecho verificado, es la explicación más probable y hay que
-medirla:** un DSP opera Ford Transit y Sprinter, que suelen quedar **por
-debajo de las 10.001 libras de peso bruto**. Ese es justo el umbral a partir
-del cual hace falta número USDOT. Si la mayoría de los DSP no necesitan
-registrarse, **el censo no los infra-representa por casualidad: no los
-contiene**.
+⚠️ **Not a verified fact, the most likely explanation, to be measured:** a DSP
+runs Ford Transits and Sprinters, which usually sit **below 10,001 lb gross
+weight**. That's exactly the threshold for needing a USDOT number. If most DSPs
+don't need to register, **the census doesn't under-represent them by chance: it
+doesn't contain them**.
 
-Comprobarlo es barato y es lo primero de la próxima sesión: coger 5 DSP
-conocidos de la zona y buscar si tienen número USDOT. Si no lo tienen, la
-fuente de leads hay que replantearla entera, y es mejor saberlo antes de
-construir el importador que después.
+Checking it is cheap and is the first thing for the next session: take 5 known
+local DSPs and look for a USDOT number. If they don't have one, the lead source
+must be rethought entirely, and it's better to know before building the importer
+than after.
 
-## Qué hacer según el resultado
+## What to do depending on the result
 
-| Si los DSP conocidos… | Entonces |
+| If the known DSPs… | Then |
 |---|---|
-| **sí** tienen USDOT | El censo vale como universo. El enriquecimiento web (Playwright efímero) es quien decide si cada candidato es DSP. Coste: una visita por candidato sobre ~400, no sobre 130.000 |
-| **no** tienen USDOT | El censo no sirve para este nicho y hay que buscar otra fuente. Google Places sigue descartado por su política de almacenamiento |
+| **do** have USDOT | The census works as the universe. Web enrichment (throwaway Playwright) decides whether each candidate is a DSP. Cost: one visit per candidate over ~400, not 130,000 |
+| **don't** have USDOT | The census is useless for this niche and another source is needed. Google Places remains ruled out by its storage policy |
 
-**No se construye el esquema de leads hasta contestar esto.** Un `lead` con
-campos pensados para el censo es trabajo tirado si la fuente cambia.
+**The lead schema doesn't get built until this is answered.** A `lead` with
+fields designed for the census is wasted work if the source changes.
 
-## Cómo reproducir
+## How to reproduce
 
 ```bash
 B=https://data.transportation.gov/resource/az4n-8mr2.json
@@ -146,102 +146,101 @@ curl -s -G "$B" --data-urlencode '$select=count(*)' \
 
 ---
 
-# FUENTE NUEVA: dspjobhub.com (2026-08-03)
+# NEW SOURCE: dspjobhub.com (2026-08-03)
 
-el dueño aporta la fuente que el censo no podía dar: **un portal de empleo
-específico de DSP de Amazon**. Confirma la intuición de que la señal que
-distingue a un DSP es que **contrata repartidores sin parar**.
+The owner brings the source the census couldn't provide: **a job board specific
+to Amazon DSPs**. It confirms the intuition that what sets a DSP apart is that
+**it hires drivers non-stop**.
 
-Prueba de fuego superada: **Example Logistics NYC aparece ahí**, y es uno de
-los tres que el censo FMCSA no contenía.
+Acid test passed: **DSP C shows up there**, and it's one of the three the FMCSA
+census didn't contain.
 
-## Revisión legal — ANTES de escribir nada
+## Legal review — BEFORE writing anything
 
-| Comprobación | Resultado |
+| Check | Result |
 |---|---|
-| `robots.txt` | `Allow: /` general. Bloquea `/jobs?*` (buscador con parámetros), `/admin`, `/login`, `/register`, `/recruitersearch` |
-| Fichas `/job/...` | **NO bloqueadas** — es donde está el dato |
-| Términos de servicio | **No existen**: `/terms`, `/terms-of-service`, `/privacy`, `/legal` devuelven 404 |
+| `robots.txt` | General `Allow: /`. Blocks `/jobs?*` (search with parameters), `/admin`, `/login`, `/register`, `/recruitersearch` |
+| `/job/...` listings | **NOT blocked** — that's where the data is |
+| Terms of service | **Don't exist**: `/terms`, `/terms-of-service`, `/privacy`, `/legal` return 404 |
 
-No hay ToS que prohíba nada, y `robots.txt` permite justo la ruta que interesa.
-**Regla que se mantiene:** solo fichas `/job/...`, nunca `/jobs?...`, y a ritmo
-humano. Si algún día publican términos, se releen antes de seguir.
+No ToS forbids anything, and `robots.txt` allows exactly the route that matters.
+**Rule that stands:** only `/job/...` listings, never `/jobs?...`, and at a human
+pace. If they ever publish terms, they get re-read before continuing.
 
-## ⚠️ La trampa: el campo "correcto" miente
+## ⚠️ The trap: the "right" field lies
 
-Las fichas traen **JSON-LD `JobPosting`** de schema.org, que es la mejor noticia
-posible: datos estructurados, sin raspar HTML frágil. Pero:
+The listings carry schema.org **`JobPosting` JSON-LD**, the best possible news:
+structured data, no fragile HTML scraping. But:
 
 ```json
 "hiringOrganization": {"@type":"Organization","name":"Amazon"}
 "title": "Delivery Driver (Amazon DSP - Bronx) - Example Logistics NYC"
 ```
 
-**`hiringOrganization.name` es "Amazon" en todas las ofertas.** El nombre del DSP
-está solo en el `title`, detrás del último " - ". Fiarse del campo estructurado
-—que es lo natural con JSON-LD— daría miles de leads llamados "Amazon" y un
-dataset inservible.
+**`hiringOrganization.name` is "Amazon" in every posting.** The DSP's name is
+only in the `title`, after the last " - ". Trusting the structured field — the
+natural thing with JSON-LD — would give thousands of leads called "Amazon" and a
+useless dataset.
 
-**El nombre del DSP se extrae del `title`, no de `hiringOrganization`.**
+**The DSP name is extracted from the `title`, not from `hiringOrganization`.**
 
-## Campos aprovechables
+## Usable fields
 
-| Campo | Ejemplo | Uso |
+| Field | Example | Use |
 |---|---|---|
-| `title` | `… - Example Logistics NYC` | **nombre del DSP** (tras el último " - ") |
-| `jobLocation[].address.addressLocality` | `The Bronx, NY, United States` | ciudad y estado |
-| `datePosted` | `2026-04-21` | recencia = señal de que sigue operando |
-| `jobBenefits` | `$23.75 / hour` | tamaño/salud aproximada |
-| `url` | ficha | procedencia, para poder reauditar |
-| `description` | HTML | a veces trae web o redes de la empresa |
+| `title` | `… - Example Logistics NYC` | **DSP name** (after the last " - ") |
+| `jobLocation[].address.addressLocality` | `The Bronx, NY, United States` | city and state |
+| `datePosted` | `2026-04-21` | recency = sign it's still operating |
+| `jobBenefits` | `$23.75 / hour` | rough size/health |
+| `url` | listing | provenance, to be able to re-audit |
+| `description` | HTML | sometimes includes the company's website or socials |
 
-⚠️ `validThrough` viene con año **2126** — un siglo de más. No sirve para
-caducar nada; usar `datePosted`.
+⚠️ `validThrough` comes with the year **2126** — a century too far. Useless for
+expiring anything; use `datePosted`.
 
-## Lo que NO da, y cómo se completa
+## What it does NOT give, and how it's completed
 
-el dueño lo confirma y la ficha lo corrobora: **no hay teléfono ni Instagram** en
-la página (`telephone` y `instagram` ausentes del HTML). El contacto es el
-segundo paso:
+The listing confirms it: **no phone and no Instagram** on the page (`telephone`
+and `instagram` absent from the HTML). Contact is the second step:
 
-- Muchos DSP tienen **Instagram** → búsqueda por nombre
-- **Google Maps** los tiene, pero normalmente **sin teléfono directo**
-- La `description` a veces incluye web o redes
+- Many DSPs have **Instagram** → search by name
+- **Google Maps** has them, but usually **without a direct phone**
+- The `description` sometimes includes a website or socials
 
-Eso convierte el enriquecimiento en lo mismo que ya se había concluido: la
-fuente da el **nombre + ciudad**, y el contacto se busca aparte.
+That turns enrichment into what had already been concluded: the source gives
+**name + city**, and the contact is found separately.
 
-## Siguiente paso concreto
+## Concrete next step
 
-1. Contar cuántas fichas hay para NJ/NY y cuántos DSP **distintos** salen tras
-   deduplicar por nombre. Es el equivalente al conteo que se hizo con el censo,
-   y decide si la fuente tiene volumen o son cuatro empresas repetidas.
-2. Solo entonces, el esquema de `lead`.
+1. Count how many listings there are for NJ/NY and how many **distinct** DSPs
+   remain after deduplicating by name. It's the equivalent of the census count,
+   and it decides whether the source has volume or is four repeated companies.
+2. Only then, the `lead` schema.
 
 ---
 
-## ⚠️ "Amazon DSP" es ambiguo — y contamina cualquier búsqueda
+## ⚠️ "Amazon DSP" is ambiguous — and it pollutes any search
 
-Descubierto el 2026-08-03 al mirar `theaccrueagency.com`, que puja en Google
-Ads por la palabra clave exacta `amazon dsp services`.
+Discovered on 2026-08-03 while looking at a marketing agency that bids on Google
+Ads for the exact keyword `amazon dsp services`.
 
-**Son dos productos de Amazon sin ninguna relación:**
+**They are two unrelated Amazon products:**
 
-| Sigla | Qué es | Quién lo usa |
+| Acronym | What it is | Who uses it |
 |---|---|---|
-| **DSP = Delivery Service Partner** | Empresas de reparto de última milla | Nuestro nicho |
-| **DSP = Demand-Side Platform** | Plataforma publicitaria programática de Amazon | Agencias de marketing y vendedores |
+| **DSP = Delivery Service Partner** | Last-mile delivery companies | Our niche |
+| **DSP = Demand-Side Platform** | Amazon's programmatic ad platform | Marketing agencies and sellers |
 
-`theaccrueagency.com` es una agencia de marketing ("Full Service Amazon
-Marketing Agency", 200+ marcas escaladas): vende lo segundo. Aparece de primera
-si buscas "amazon dsp services" porque paga por esa keyword.
+That agency ("Full Service Amazon Marketing Agency", 200+ brands scaled) sells
+the second one. It shows up first when you search "amazon dsp services" because
+it pays for that keyword.
 
-**Consecuencia para el pipeline de leads:** buscar "Amazon DSP" a secas trae
-agencias de publicidad mezcladas con empresas de reparto, y la mezcla no se ve
-hasta que alguien intenta llamar. Los términos deben desambiguar
-(*delivery service partner*, *delivery associate*, *last mile*, *DSP owner*) y
-excluir lo publicitario (*ads*, *demand-side*, *PPC*, *seller*, *agency*).
+**Consequence for the lead pipeline:** searching for plain "Amazon DSP" brings ad
+agencies mixed with delivery companies, and the mix isn't visible until someone
+tries to call. Search terms must disambiguate (*delivery service partner*,
+*delivery associate*, *last mile*, *DSP owner*) and exclude the advertising side
+(*ads*, *demand-side*, *PPC*, *seller*, *agency*).
 
-Esto **no** afecta a `dspjobhub.com`, que es específico de reparto por
-construcción. Afecta a cualquier enriquecimiento por búsqueda web o Maps, que
-es justo el paso que falta para conseguir los contactos.
+This does **not** affect `dspjobhub.com`, which is delivery-specific by
+construction. It affects any enrichment through web or Maps search, which is
+exactly the step still missing to get the contacts.

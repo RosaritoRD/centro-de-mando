@@ -1,116 +1,115 @@
-# SPIKE 02 — ¿sobrevive una aprobación diferida a la recreación del contenedor?
+# SPIKE 02 — does a deferred approval survive container recreation?
 
-**Fecha:** 2026-08-03 · Cierra el hueco que dejó abierto `SPIKE-01-defer.md` · **Coste:** ~$0.35
-**Código:** `spike/session-store-pg/` · **Se corre con:** `./tools/spike-02.sh`
+**Date:** 2026-08-03 · Closes the gap left open by `SPIKE-01-defer.md` · **Cost:** ~$0.35
+**Code:** `spike/session-store-pg/` · **Run with:** `./tools/spike-02.sh`
 
 ---
 
-## Veredicto
+## Verdict
 
-> **SÍ.** Con un `SessionStore` sobre Postgres, un contenedor difiere la
-> herramienta y **otro contenedor distinto, con el disco limpio**, reanuda por
-> `session_id`, aprueba, y **la herramienta se ejecuta de verdad**.
+> **YES.** With a `SessionStore` on Postgres, one container defers the tool and
+> **a different container, with a clean disk**, resumes by `session_id`,
+> approves, and **the tool really runs**.
 
-Con esto el riesgo nº1 del proyecto (`RESEARCH.md` §7) queda cerrado del todo:
-SPIKE 01 probó que sobrevive a la muerte del **proceso**; este prueba que
-sobrevive a la muerte del **contenedor**, que es lo que pasa en cada
+With this, the project's #1 risk (`RESEARCH.md` §7) is fully closed: SPIKE 01
+proved it survives the death of the **process**; this one proves it survives the
+death of the **container**, which is what happens on every
 `docker compose up -d --build`.
 
 ```
-Contenedor 1 (fase A)   difiere el Write   → archivo NO existe · 14 entradas en Postgres
-                        [contenedor destruido]
-Contenedor 2 (fase B)   disco sin transcript ✓ · reanuda desde Postgres · aprueba
-                        → archivo existe · "gasto 12.50 cafe"
+Container 1 (phase A)   defers the Write   → file does NOT exist · 14 entries in Postgres
+                        [container destroyed]
+Container 2 (phase B)   no transcript on disk ✓ · resumes from Postgres · approves
+                        → file exists · "expense 12.50 coffee"
 ```
 
 ---
 
-## Por qué la prueba vale
+## Why the test is valid
 
-Dos cosas que la hacen honesta, y que costaron más que el resto:
+Two things make it honest, and they cost more than the rest:
 
-1. **Son contenedores de verdad distintos.** Cada fase es un `docker run --rm`
-   independiente. El `~/.claude/` del primero no existe para el segundo.
-2. **La fase B se niega a correr si encuentra el transcript en disco.** Sin ese
-   guardián, la prueba pasaría igual reanudando desde el archivo local y no
-   probaría nada sobre Postgres. Es la lección de SPIKE 01: el veredicto es el
-   **efecto observable** (un archivo con el contenido correcto), nunca lo que
-   diga el modelo ni el `terminal_reason`.
+1. **They really are different containers.** Each phase is an independent
+   `docker run --rm`. The first one's `~/.claude/` doesn't exist for the second.
+2. **Phase B refuses to run if it finds the transcript on disk.** Without that
+   guard, the test would pass anyway by resuming from the local file and prove
+   nothing about Postgres. It's SPIKE 01's lesson: the verdict is the
+   **observable effect** (a file with the right content), never what the model
+   says or the `terminal_reason`.
 
-Se usa la herramienta **integrada `Write`**, no un MCP in-process, porque
-SPIKE 01 ya demostró que un servidor `sdk` no se reconecta al reanudar.
+It uses the **built-in `Write`** tool, not in-process MCP, because SPIKE 01
+already showed that an `sdk` server doesn't reconnect on resume.
 
 ---
 
-## La trampa que encontró: el `projectKey` sale del `cwd`
+## The trap it found: the `projectKey` comes from the `cwd`
 
-El SDK no expone opción para fijar el `projectKey`: lo **deriva del `cwd`
-saneado**. Si el `WORKDIR` del contenedor cambia entre despliegues, la clave
-cambia, `load()` no encuentra nada y la sesión no reanuda.
+The SDK exposes no option to set the `projectKey`: it **derives it from the
+sanitized `cwd`**. If the container's `WORKDIR` changes between deploys, the key
+changes, `load()` finds nothing and the session doesn't resume.
 
-Probado a propósito — misma sesión, `cwd` distinto:
+Tested on purpose — same session, different `cwd`:
 
 ```
 Error: Claude Code returned an error result:
 No conversation found with session ID: 0c84131b-…
 ```
 
-**La buena noticia es cómo falla: ruidosamente**, con excepción y salida 1. Es
-lo contrario del fallo del MCP in-process, que terminaba `completed` sin error
-mientras el agente se disculpaba. Este APM lo puede detectar y reportar.
+**The good news is how it fails: loudly**, with an exception and exit 1. It's
+the opposite of the in-process MCP failure, which ended `completed` with no
+error while the agent apologized. APM can detect and report this one.
 
-**Consecuencia para APM:** el `WORKDIR` del contenedor de agentes pasa a ser
-parte del contrato de datos, no una decisión de empaquetado. Cambiarlo
-invalida todas las aprobaciones pendientes.
-
----
-
-## Una sospecha que resultó falsa
-
-Se escribió el spike con `sessionStoreFlush: 'eager'` suponiendo que el
-defecto `'batched'` dejaría el último lote sin escribir al morir el proceso
-justo en el defer.
-
-**Es falso, y está medido:** el ciclo completo pasa igual con `'batched'`. Un
-defer emite un mensaje `result`, y el SDK vacía el buffer del mirror en cada
-`result` — el defer **ya es** un punto de flush. Se deja el defecto; `'eager'`
-cuesta un `append()` por frame sin comprar nada. `SPIKE_FLUSH` reproduce ambos.
+**Consequence for APM:** the agent container's `WORKDIR` becomes part of the
+data contract, not a packaging decision. Changing it invalidates every pending
+approval.
 
 ---
 
-## Lo que hay que respetar al implementar el adaptador
+## A suspicion that turned out false
 
-Del contrato del SDK (`sdk.d.ts`), no de la intuición:
+The spike was written with `sessionStoreFlush: 'eager'`, assuming the default
+`'batched'` would leave the last batch unwritten when the process died right on
+the defer.
 
-| Regla | Por qué |
+**False, and measured:** the full cycle passes just the same with `'batched'`. A
+defer emits a `result` message, and the SDK flushes the mirror buffer on every
+`result` — the defer **already is** a flush point. The default stays; `'eager'`
+costs one `append()` per frame and buys nothing. `SPIKE_FLUSH` reproduces both.
+
+---
+
+## What the adapter implementation must respect
+
+From the SDK contract (`sdk.d.ts`), not from intuition:
+
+| Rule | Why |
 |---|---|
-| `uuid` es clave de **idempotencia** | El SDK reintenta `append()` 3 veces y `importSessionToStore()` reproduce entradas. Sin `ON CONFLICT DO NOTHING` el transcript se duplica y la sesión reanudada ve el turno dos veces |
-| Hay entradas **sin `uuid`** | Títulos, tags, marcadores de modo. El contrato manda añadirlas sin deduplicar → el índice único es **parcial** (`WHERE entry_uuid IS NOT NULL`) |
-| El orden **es** el dato | `load()` debe devolver lo mismo en el mismo orden. Por eso la PK es `BIGSERIAL` y no UUID: un UUID aleatorio no ordena |
-| `entry` es un **blob opaco** | El SDK documenta su forma como interna de la CLI; lo único garantizado es el round-trip `JSON.stringify`/`parse`. JSONB puede reordenar claves y da igual: el SDK nunca compara bytes |
-| `delete()` es **opcional** | Su ausencia es un no-op válido para backends append-only. Encaja con la política del proyecto: a `apm_app` no se le concede DELETE |
-| `listSubkeys()` no es opcional *de facto* | Sin él, al reanudar solo se materializa el transcript principal y **se pierden los de los subagentes** |
+| `uuid` is an **idempotency** key | The SDK retries `append()` 3 times and `importSessionToStore()` replays entries. Without `ON CONFLICT DO NOTHING` the transcript gets duplicated and the resumed session sees the turn twice |
+| Some entries have **no `uuid`** | Titles, tags, mode markers. The contract says to append them without dedup → the unique index is **partial** (`WHERE entry_uuid IS NOT NULL`) |
+| The order **is** the data | `load()` must return the same thing in the same order. That's why the PK is `BIGSERIAL` and not a UUID: a random UUID doesn't sort |
+| `entry` is an **opaque blob** | The SDK documents its shape as CLI-internal; the only guarantee is the `JSON.stringify`/`parse` round-trip. JSONB may reorder keys and that's fine: the SDK never compares bytes |
+| `delete()` is **optional** | Its absence is a valid no-op for append-only backends. It fits the project's policy: `apm_app` isn't granted DELETE |
+| `listSubkeys()` is not optional *in practice* | Without it, resuming only materializes the main transcript and **the subagents' transcripts are lost** |
 
-También: `sessionStore` **no se puede usar con `persistSession: false`**. El
-mirror se dispara después del write local, así que el SDK sigue escribiendo en
-disco. Postgres es la copia que sobrevive, no un reemplazo.
-
----
-
-## Qué queda de la Fase 2
-
-El cimiento está. Falta lo de encima: Agent SDK en el backend, orquestador +
-1 subagente real, UI de chat con streaming, registro de coste por ejecución y
-la aprobación humana cableada con `canUseTool` + hooks.
-
-Sigue vigente la regla que salió de SPIKE 01: **nunca dar una aprobación por
-buena por el `terminal_reason`.** APM verifica el efecto. Si la fila de
-`approval` dice `allow` pero la herramienta no dejó rastro, la ejecución es
-`failed`, no `done`.
+Also: `sessionStore` **can't be used with `persistSession: false`**. The mirror
+fires after the local write, so the SDK keeps writing to disk. Postgres is the
+copy that survives, not a replacement.
 
 ---
 
-## Cómo reproducirlo
+## What was left of Phase 2
+
+The foundation is in place. What's left goes on top: Agent SDK in the backend,
+orchestrator + 1 real subagent, streaming chat UI, per-run cost logging, and
+human approval wired with `canUseTool` + hooks.
+
+The rule that came out of SPIKE 01 still stands: **never accept an approval
+based on `terminal_reason`.** APM verifies the effect. If the `approval` row
+says `allow` but the tool left no trace, the run is `failed`, not `done`.
+
+---
+
+## How to reproduce it
 
 ```bash
 cd /opt/centro-de-mando
@@ -118,5 +117,4 @@ docker exec -i n8n_postgres psql -U n8n -d apm < db/migrations/002_session_store
 ./tools/spike-02.sh
 ```
 
-Modelo `claude-haiku-4-5` a propósito: esto prueba fontanería, no
-inteligencia.
+`claude-haiku-4-5` on purpose: this tests plumbing, not intelligence.

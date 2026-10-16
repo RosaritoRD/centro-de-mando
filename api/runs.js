@@ -1,11 +1,11 @@
-/* tu empresa — APM · rutas de ejecuciones y aprobaciones (Fase 2).
+/* Acme — APM · run and approval routes (Phase 2).
 
-   El contrato del chat: se crea una ejecución con POST /api/runs y se sigue
-   con GET /api/runs/:id/stream. El stream NO es el estado — es un empujón
-   para no hacer polling. El estado es `run_event`, y por eso el stream
-   empieza REPRODUCIENDO lo que ya pasó antes de emitir en vivo: un navegador
-   que se conecta tarde, o que se reconecta tras un corte, ve la conversación
-   entera y no solo lo que ocurra a partir de ahora. */
+   The chat contract: a run is created with POST /api/runs and followed with
+   GET /api/runs/:id/stream. The stream is NOT the state — it's a nudge to
+   avoid polling. The state is `run_event`, which is why the stream starts by
+   REPLAYING what already happened before emitting live: a browser that
+   connects late, or reconnects after a drop, sees the whole conversation and
+   not only what happens from now on. */
 
 import { Router } from 'express';
 import { db } from './db.js';
@@ -15,14 +15,14 @@ import { desdeFilaRun, comoTexto } from './location.js';
 export function rutasRuns(auth) {
   const r = Router();
 
-  /* ── Crear ejecución ───────────────────────────────────────────── */
+  /* ── Create a run ──────────────────────────────────────────────── */
   r.post('/api/runs', auth, async (req, res) => {
     const prompt = String(req.body?.prompt || '').trim();
     if (!prompt) {
-      return res.status(400).json({ error: { code: 'bad_prompt', message: 'hace falta un prompt' } });
+      return res.status(400).json({ error: { code: 'bad_prompt', message: 'a prompt is required' } });
     }
     if (prompt.length > 20000) {
-      return res.status(400).json({ error: { code: 'prompt_too_long', message: 'máximo 20.000 caracteres' } });
+      return res.status(400).json({ error: { code: 'prompt_too_long', message: '20,000 characters max' } });
     }
     try {
       const run = await crearRun({
@@ -35,17 +35,17 @@ export function rutasRuns(auth) {
       });
       res.status(201).json({ id: run.id, status: run.status, model: run.model });
     } catch (e) {
-      /* 429 y no 500: no es un fallo, es el freno de mano funcionando. El
-         front lo distingue para enseñar un aviso en vez de un error rojo. */
+      /* 429, not 500: it isn't a failure, it's the handbrake working. The
+         front end tells them apart to show a notice instead of a red error. */
       if (e.code === 'budget_exhausted' || e.code === 'too_many_runs') {
         return res.status(429).json({ error: { code: e.code, message: e.message } });
       }
       console.error('crear run:', e.message);
-      res.status(500).json({ error: { code: 'run_error', message: 'no pude arrancar la ejecución' } });
+      res.status(500).json({ error: { code: 'run_error', message: 'could not start the run' } });
     }
   });
 
-  /* ── Listado ───────────────────────────────────────────────────── */
+  /* ── List ──────────────────────────────────────────────────────── */
   r.get('/api/runs', auth, async (req, res) => {
     const limite = Math.min(Number(req.query.limit) || 30, 100);
     try {
@@ -59,9 +59,9 @@ export function rutasRuns(auth) {
         runs: rows.map((x) => ({
           id: x.id, area: x.area, title: x.title, status: x.status, model: x.model,
           createdAt: x.created_at, endedAt: x.ended_at, costUsd: Number(x.cost_usd),
-          /* `continuable` lo decide el servidor y no el navegador: es el
-             servidor quien sabe que sin session_id no hay nada que reanudar,
-             y así el botón de escribir no aparece para desaparecer al pulsar. */
+          /* `continuable` is decided by the server, not the browser: the server
+             knows that without a session_id there's nothing to resume, so the
+             reply box never appears only to vanish when you press it. */
           continuable: Boolean(x.session_id) && !['running', 'queued', 'awaiting_approval'].includes(x.status),
           ubicacion: desdeFilaRun(x),
           buscaEn: comoTexto(desdeFilaRun(x).target)
@@ -69,15 +69,15 @@ export function rutasRuns(auth) {
       });
     } catch (e) {
       console.error('listar runs:', e.message);
-      res.status(500).json({ error: { code: 'db_error', message: 'no pude leer las ejecuciones' } });
+      res.status(500).json({ error: { code: 'db_error', message: 'could not read the runs' } });
     }
   });
 
-  /* ── Detalle ───────────────────────────────────────────────────── */
+  /* ── Detail ────────────────────────────────────────────────────── */
   r.get('/api/runs/:id', auth, async (req, res) => {
     try {
       const { rows } = await db.query('SELECT * FROM run WHERE id = $1', [req.params.id]);
-      if (!rows[0]) return res.status(404).json({ error: { code: 'not_found', message: 'no existe' } });
+      if (!rows[0]) return res.status(404).json({ error: { code: 'not_found', message: 'not found' } });
       const { rows: ev } = await db.query(
         'SELECT seq, kind, payload, created_at FROM run_event WHERE run_id = $1 ORDER BY seq', [req.params.id]);
       const { rows: ap } = await db.query(
@@ -97,25 +97,26 @@ export function rutasRuns(auth) {
       });
     } catch (e) {
       console.error('detalle run:', e.message);
-      res.status(500).json({ error: { code: 'db_error', message: 'no pude leer la ejecución' } });
+      res.status(500).json({ error: { code: 'db_error', message: 'could not read the run' } });
     }
   });
 
-  /* ── Otro mensaje en un chat ya abierto ────────────────────────
-     Ruta aparte y no un POST /api/runs con un id: crear y continuar fallan
-     de formas distintas (409 si sigue trabajando, 409 si no hay sesión que
-     reanudar) y mezclarlas escondería justo esos dos casos. */
+  /* ── Another message in an open chat ───────────────────────────
+     A separate route rather than POST /api/runs with an id: creating and
+     continuing fail in different ways (409 if it's still working, 409 if
+     there's no session to resume) and mixing them would hide exactly those
+     two cases. */
   r.post('/api/runs/:id/messages', auth, async (req, res) => {
     const prompt = String(req.body?.prompt || '').trim();
     if (!prompt) {
-      return res.status(400).json({ error: { code: 'bad_prompt', message: 'hace falta un prompt' } });
+      return res.status(400).json({ error: { code: 'bad_prompt', message: 'a prompt is required' } });
     }
     if (prompt.length > 20000) {
-      return res.status(400).json({ error: { code: 'prompt_too_long', message: 'máximo 20.000 caracteres' } });
+      return res.status(400).json({ error: { code: 'prompt_too_long', message: '20,000 characters max' } });
     }
     try {
       const out = await continuarRun(req.params.id, prompt);
-      if (!out) return res.status(404).json({ error: { code: 'not_found', message: 'no existe' } });
+      if (!out) return res.status(404).json({ error: { code: 'not_found', message: 'not found' } });
       res.status(201).json(out);
     } catch (e) {
       if (e.code === 'budget_exhausted' || e.code === 'too_many_runs') {
@@ -125,7 +126,7 @@ export function rutasRuns(auth) {
         return res.status(409).json({ error: { code: e.code, message: e.message } });
       }
       console.error('continuar run:', e.message);
-      res.status(500).json({ error: { code: 'run_error', message: 'no pude continuar la conversación' } });
+      res.status(500).json({ error: { code: 'run_error', message: 'could not continue the conversation' } });
     }
   });
 
@@ -133,10 +134,10 @@ export function rutasRuns(auth) {
   r.get('/api/runs/:id/stream', auth, async (req, res) => {
     const runId = req.params.id;
 
-    /* Estas cuatro cabeceras son las que hacen que el chat no parezca
-       colgado. `X-Accel-Buffering: no` es la que desactiva el buffering de
-       nginx — hace falta AQUÍ y además en el Proxy Host de NPM (informe F
-       §6): con una sola de las dos, la respuesta llega de golpe al final. */
+    /* These four headers are what keep the chat from looking frozen.
+       `X-Accel-Buffering: no` is the one that turns off nginx buffering — it's
+       needed HERE and also in the NPM Proxy Host (report F §6): with only one
+       of the two, the response arrives all at once at the end. */
     res.set({
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
@@ -151,9 +152,9 @@ export function rutasRuns(auth) {
       res.write(`data: ${JSON.stringify(e.payload ?? {})}\n\n`);
     };
 
-    /* Reproducción antes de emitir en vivo. `Last-Event-ID` lo manda el
-       navegador solo al reconectar, así que un corte de red no duplica ni
-       pierde: se reanuda justo donde se quedó. */
+    /* Replay before going live. The browser only sends `Last-Event-ID` when
+       reconnecting, so a network drop neither duplicates nor loses anything:
+       it resumes exactly where it left off. */
     const desde = Number(req.header('Last-Event-ID') || req.query.desde || 0);
     try {
       const { rows } = await db.query(
@@ -167,8 +168,8 @@ export function rutasRuns(auth) {
     const onEvento = (e) => enviar(e);
     bus.on(runId, onEvento);
 
-    /* Latido cada 25 s. Sin esto, un proxy con timeout de 60 s corta una
-       ejecución larga que esté pensando y el navegador cree que murió. */
+    /* Heartbeat every 25 s. Without it, a proxy with a 60 s timeout cuts off a
+       long run that's thinking, and the browser thinks it died. */
     const latido = setInterval(() => res.write(': ping\n\n'), 25_000);
 
     req.on('close', () => {
@@ -177,7 +178,7 @@ export function rutasRuns(auth) {
     });
   });
 
-  /* ── Aprobaciones ──────────────────────────────────────────────── */
+  /* ── Approvals ─────────────────────────────────────────────────── */
   r.get('/api/approvals', auth, async (_req, res) => {
     try {
       const { rows } = await db.query(
@@ -189,27 +190,27 @@ export function rutasRuns(auth) {
         input: a.tool_input, summary: a.summary, createdAt: a.created_at
       })));
     } catch (e) {
-      console.error('aprobaciones:', e.message);
-      res.status(500).json({ error: { code: 'db_error', message: 'no pude leer las aprobaciones' } });
+      console.error('approvals:', e.message);
+      res.status(500).json({ error: { code: 'db_error', message: 'could not read the approvals' } });
     }
   });
 
   r.post('/api/approvals/:id', auth, async (req, res) => {
     const decision = req.body?.decision;
     if (decision !== 'allow' && decision !== 'deny') {
-      return res.status(400).json({ error: { code: 'bad_decision', message: "decision: 'allow' o 'deny'" } });
+      return res.status(400).json({ error: { code: 'bad_decision', message: "decision: 'allow' or 'deny'" } });
     }
     try {
       const out = await decidir(req.params.id, decision, req.body?.reason);
-      /* 409 y no 404: la fila existe, lo que ya no está es la posibilidad de
-         decidir. Pasa si se pulsa dos veces desde el móvil. */
+      /* 409, not 404: the row exists; what's gone is the chance to decide.
+         Happens when you tap twice on your phone. */
       if (!out) {
-        return res.status(409).json({ error: { code: 'already_decided', message: 'ya estaba decidida o no existe' } });
+        return res.status(409).json({ error: { code: 'already_decided', message: 'already decided or does not exist' } });
       }
       res.json({ ok: true, runId: out.runId, resumed: out.resumed });
     } catch (e) {
       console.error('decidir:', e.message);
-      res.status(500).json({ error: { code: 'approval_error', message: 'no pude aplicar la decisión' } });
+      res.status(500).json({ error: { code: 'approval_error', message: 'could not apply the decision' } });
     }
   });
 

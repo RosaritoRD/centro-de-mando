@@ -1,16 +1,16 @@
-/* tu empresa — APM · servidor.
+/* Acme — APM · server.
 
-   Fase 1: el esqueleto. Salud, identidad y presupuesto. El runtime de agentes
-   (Claude Agent SDK), el chat por SSE y las aprobaciones son la Fase 2, y no
-   están aquí a propósito: un esqueleto que arranca, se despliega y se ve por
-   HTTPS es lo que hay que verificar antes de meterle un agente dentro.
+   Phase 1: the skeleton. Health, identity and budget. The agent runtime
+   (Claude Agent SDK), the SSE chat and approvals are Phase 2 and live in their
+   own modules on purpose: a skeleton that starts, deploys and is reachable
+   over HTTPS is what has to be verified before putting an agent inside it.
 
-   Contratos completos en docs/ARCHITECTURE.md §4. */
+   Full contracts in docs/ARCHITECTURE.md §4. */
 
 import express from 'express';
-/* Imports modulares y NO `import admin from 'firebase-admin'`: en la v14 el
-   export por defecto no trae `.credential`, así que la forma antigua muere
-   con "Cannot read properties of undefined (reading 'cert')" al arrancar. */
+/* Modular imports and NOT `import admin from 'firebase-admin'`: in v14 the
+   default export has no `.credential`, so the old style dies on startup with
+   "Cannot read properties of undefined (reading 'cert')". */
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { db, dbOk } from './db.js';
@@ -28,20 +28,20 @@ const PORT = 3000;
 const VERSION = '0.6.0';
 
 /* ── Firebase ────────────────────────────────────────────────────
-   Mismo proyecto que tu web principal: es lo que hace que la cookie __session del
-   dominio padre valga aquí. Con credenciales incompletas el proceso NO
-   arranca: una API de autenticación que se queda sin verificador y sigue
-   sirviendo es peor que una caída, porque nadie se entera. */
+   Same project as your main website: that's what makes the parent domain's __session
+   cookie valid here. With incomplete credentials the process does NOT start:
+   an auth API left without a verifier that keeps serving is worse than an
+   outage, because nobody notices. */
 const { FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY } = process.env;
 if (!FIREBASE_PROJECT_ID || !FIREBASE_CLIENT_EMAIL || !FIREBASE_PRIVATE_KEY) {
-  console.error('APM: faltan credenciales de Firebase. No arranco sin poder verificar sesiones.');
+  console.error('APM: Firebase credentials missing. Refusing to start without a way to verify sessions.');
   process.exit(1);
 }
 initializeApp({
   credential: cert({
     projectId: FIREBASE_PROJECT_ID,
     clientEmail: FIREBASE_CLIENT_EMAIL,
-    /* Los \n llegan escapados desde el .env, igual que en tu web principal. */
+    /* The \n arrive escaped from the .env, same as in your main website. */
     privateKey: FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
   })
 });
@@ -49,24 +49,24 @@ const fbAuth = getAuth();
 
 const allowlist = parseAllowlist(process.env.APM_ALLOWED_UIDS);
 if (allowlist.size === 0) {
-  /* No es fatal —la puerta queda cerrada, que es el fallo seguro— pero tiene
-     que salir en los logs o alguien va a perder una tarde preguntándose por
-     qué su propio panel le da 403. */
-  console.warn('APM: APM_ALLOWED_UIDS está vacío. Nadie va a poder entrar.');
+  /* Not fatal — the door stays shut, which is the safe failure — but it has to
+     show up in the logs or someone will lose an afternoon wondering why their
+     own dashboard returns 403. */
+  console.warn('APM: APM_ALLOWED_UIDS is empty. Nobody will be able to sign in.');
 }
 
 const app = express();
 app.disable('x-powered-by');
-/* Detrás de NPM: sin esto, req.ip es la IP del proxy. */
+/* Behind NPM: without this, req.ip is the proxy's IP. */
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
 
 const auth = requireUser({ fbAuth, allowlist });
 
-/* ── Salud ───────────────────────────────────────────────────────
-   Sin autenticar: la comprueba el HEALTHCHECK del contenedor y el vigilante
-   del host, que no tienen cookie. No revela nada: si la BD está caída dice
-   que está caída, que es justo lo que un atacante ya sabría probando. */
+/* ── Health ──────────────────────────────────────────────────────
+   Unauthenticated: the container HEALTHCHECK and the host watchdog check it,
+   and they have no cookie. It reveals nothing: if the DB is down it says so,
+   which is exactly what an attacker would learn by trying anyway. */
 app.get('/api/health', async (_req, res) => {
   const base = await dbOk();
   res.status(base.ok ? 200 : 503).json({
@@ -77,10 +77,10 @@ app.get('/api/health', async (_req, res) => {
   });
 });
 
-/* ── Quién soy ───────────────────────────────────────────────────
-   Es lo que usa el front para saber si pintar el panel o mandar a signin.
-   Devuelve los topes junto a la identidad para que el shell pueda enseñarlos
-   sin una segunda petición. */
+/* ── Who am I ────────────────────────────────────────────────────
+   The front end uses it to decide whether to render the dashboard or send you
+   to sign-in. It returns the caps along with the identity so the shell can
+   show them without a second request. */
 app.get('/api/me', auth, (req, res) => {
   res.json({
     uid: req.user.uid,
@@ -92,15 +92,15 @@ app.get('/api/me', auth, (req, res) => {
   });
 });
 
-/* ── Presupuesto del día ─────────────────────────────────────────
-   Existe ya en la Fase 1 aunque todavía no haya nada que gaste, porque el
-   freno de mano tiene que estar puesto ANTES de que entre el primer agente,
-   no después del primer susto. */
+/* ── Daily budget ────────────────────────────────────────────────
+   It already exists in Phase 1 even though nothing spends yet, because the
+   handbrake has to be on BEFORE the first agent comes in, not after the
+   first scare. */
 app.get('/api/budget', auth, async (_req, res) => {
   try {
     const limite = Number(process.env.DAILY_BUDGET_USD || 5);
-    /* Se crea la fila del día al vuelo con el límite del entorno. ON CONFLICT
-       para no pisar un límite que se haya cambiado desde el panel. */
+    /* The day's row is created on the fly with the environment's limit.
+       ON CONFLICT so a limit changed from the dashboard isn't overwritten. */
     const { rows } = await db.query(
       `INSERT INTO budget_day (day, limit_usd)
             VALUES (CURRENT_DATE, $1)
@@ -115,14 +115,14 @@ app.get('/api/budget', auth, async (_req, res) => {
     });
   } catch (e) {
     console.error('budget:', e.message);
-    res.status(500).json({ error: { code: 'db_error', message: 'no pude leer el presupuesto' } });
+    res.status(500).json({ error: { code: 'db_error', message: 'could not read the budget' } });
   }
 });
 
 app.put('/api/budget', auth, async (req, res) => {
   const limite = Number(req.body && req.body.limitUsd);
   if (!Number.isFinite(limite) || limite < 0 || limite > 1000) {
-    return res.status(400).json({ error: { code: 'bad_limit', message: 'limitUsd entre 0 y 1000' } });
+    return res.status(400).json({ error: { code: 'bad_limit', message: 'limitUsd must be between 0 and 1000' } });
   }
   try {
     await db.query(
@@ -132,14 +132,14 @@ app.put('/api/budget', auth, async (req, res) => {
     res.json({ ok: true, limitUsd: limite });
   } catch (e) {
     console.error('budget put:', e.message);
-    res.status(500).json({ error: { code: 'db_error', message: 'no pude guardar el presupuesto' } });
+    res.status(500).json({ error: { code: 'db_error', message: 'could not save the budget' } });
   }
 });
 
-/* ── Modelos y precios ───────────────────────────────────────────
-   Se sirven de la tabla y no de una constante: la promo de Sonnet 5 vence el
-   31-ago-2026 y un precio en el código empezaría a mentir ese día en
-   silencio. */
+/* ── Models and prices ───────────────────────────────────────────
+   Served from the table, not a constant: the Sonnet 5 promo ends on
+   31-Aug-2026 and a price hard-coded here would start lying that day,
+   silently. */
 app.get('/api/models', auth, async (_req, res) => {
   try {
     const { rows } = await db.query(
@@ -152,26 +152,25 @@ app.get('/api/models', auth, async (_req, res) => {
     })));
   } catch (e) {
     console.error('models:', e.message);
-    res.status(500).json({ error: { code: 'db_error', message: 'no pude leer los precios' } });
+    res.status(500).json({ error: { code: 'db_error', message: 'could not read the prices' } });
   }
 });
 
-/* ── Ubicación ───────────────────────────────────────────────────
-   Desde dónde se consulta y dónde se buscan los leads. Son dos sitios
-   distintos y por eso son dos campos: se puede vivir en un lado y vender en
-   otro, que es exactamente el caso de tu empresa.
+/* ── Location ────────────────────────────────────────────────────
+   Where you query from and where leads are searched. They're two different
+   places, hence two fields: you can live in one place and sell in another,
+   which is exactly Acme's case.
 
-   Se guarda en el servidor y no en el navegador: se entra desde el móvil y
-   desde el escritorio, y una ubicación que solo existe en un localStorage
-   significa que el agente busca en un sitio distinto según el aparato desde
-   el que se le pregunte. */
+   It's stored on the server, not in the browser: you sign in from your phone
+   and from your desktop, and a location that only lives in localStorage means
+   the agent searches somewhere different depending on the device you ask from. */
 app.get('/api/location', auth, async (_req, res) => {
   try {
     const { rows } = await db.query("SELECT value FROM setting WHERE key = 'location'");
     const guardada = ubicacionEfectiva(null, rows[0]?.value || null);
-    /* Ciudades ya escritas, para el desplegable. Salen de las ejecuciones
-       reales: escribir "Newark" bien una vez debería bastar para no volver a
-       escribirlo, y una lista fija de ciudades no acertaría nunca. */
+    /* Cities already typed, for the dropdown. They come from real runs: typing
+       "Newark" correctly once should be enough to never type it again, and a
+       fixed city list would never get it right. */
     const { rows: usadas } = await db.query(
       `SELECT DISTINCT ciudad FROM (
          SELECT base_city AS ciudad FROM run WHERE base_city IS NOT NULL
@@ -184,14 +183,14 @@ app.get('/api/location', auth, async (_req, res) => {
     });
   } catch (e) {
     console.error('location get:', e.message);
-    res.status(500).json({ error: { code: 'db_error', message: 'no pude leer la ubicación' } });
+    res.status(500).json({ error: { code: 'db_error', message: 'could not read the location' } });
   }
 });
 
 app.put('/api/location', auth, async (req, res) => {
-  /* Se normaliza ANTES de guardar: lo que entra en `setting` ya tiene la
-     forma con la que se va a leer, y un país mal escrito se descarta aquí y
-     no tres capas más abajo, dentro del system prompt. */
+  /* Normalized BEFORE saving: what goes into `setting` already has the shape
+     it will be read in, and a misspelled country is dropped here, not three
+     layers down inside the system prompt. */
   const u = normalizarUbicacion(req.body);
   try {
     await db.query(
@@ -201,24 +200,24 @@ app.put('/api/location', auth, async (req, res) => {
     res.json({ ...u, resumen: { base: comoTexto(u.base), target: comoTexto(u.target) } });
   } catch (e) {
     console.error('location put:', e.message);
-    res.status(500).json({ error: { code: 'db_error', message: 'no pude guardar la ubicación' } });
+    res.status(500).json({ error: { code: 'db_error', message: 'could not save the location' } });
   }
 });
 
-/* ── Runtime de agentes (Fase 2) ─────────────────────────────────
-   Ejecuciones, stream SSE y aprobaciones. Va en su propio módulo porque el
-   bucle del agente y la puerta de aprobación no tienen nada que ver con
-   servir identidad y presupuesto. */
+/* ── Agent runtime (Phase 2) ─────────────────────────────────────
+   Runs, SSE stream and approvals. It has its own module because the agent
+   loop and the approval gate have nothing to do with serving identity and
+   budget. */
 app.use(rutasRuns(auth));
 
-/* ── Proyectos y health checks (Fase 5) ─────────────────────────── */
+/* ── Projects and health checks (Phase 5) ───────────────────────── */
 app.use(rutasProyectos(auth));
 
-/* ── Puente con n8n (Fase 6) ─────────────────────────────────────
-   Solo lectura: la REST API de n8n no ejecuta workflows. */
+/* ── n8n bridge (Phase 6) ────────────────────────────────────────
+   Read-only: the n8n REST API doesn't run workflows. */
 app.use(rutasN8n(auth));
-/* Fase 3 — prospección por llamadas. El scraper de Maps es opcional: sin
-   GMAPS_SCRAPER_URL esa fuente falla con un error claro y NYC sigue funcionando. */
+/* Phase 3 — call prospecting. The Maps scraper is optional: without
+   GMAPS_SCRAPER_URL that source fails with a clear error and NYC keeps working. */
 app.use(rutasLeads(auth, {
   repo: crearRepoLeads({ db }),
   fuentes: {
@@ -227,9 +226,9 @@ app.use(rutasLeads(auth, {
   }
 }));
 
-app.use((_req, res) => res.status(404).json({ error: { code: 'not_found', message: 'no existe' } }));
+app.use((_req, res) => res.status(404).json({ error: { code: 'not_found', message: 'not found' } }));
 
 app.listen(PORT, () => {
-  console.log(`apm-api escuchando en :${PORT} (v${VERSION})`);
+  console.log(`apm-api listening on :${PORT} (v${VERSION})`);
   arrancarVigilancia();
 });

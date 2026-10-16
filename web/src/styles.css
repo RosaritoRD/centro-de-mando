@@ -1,13 +1,13 @@
-/* tu empresa — APM · sistema Spectra.
+/* Acme — APM · Spectra system.
 
-   Los valores NO son una interpretación: están copiados de
-   /opt/tu web principal/css/styles.css, que es lo que hoy corre en producción
-   (docs/research/H-spectra-tokens.md). Si los dos productos no comparten
-   exactamente estos números, se ven de familias distintas.
+   The values are NOT an interpretation: they're copied from
+   /opt/your main website/css/styles.css, which is what runs in production today
+   (docs/research/H-spectra-tokens.md). If the two products don't share exactly
+   these numbers, they look like they come from different families.
 
-   Las fuentes son variables woff2 servidas desde nuestro propio dominio. Nada
-   de Google Fonts: la CSP de la casa no admite orígenes externos, y una
-   librería que meta un <link> a fonts.googleapis.com rompe la página. */
+   Fonts are variable woff2 files served from our own domain. No Google Fonts:
+   the house CSP doesn't allow external origins, and a library that injects a
+   <link> to fonts.googleapis.com breaks the page. */
 
 @font-face {
   font-family: 'Sora';
@@ -25,7 +25,7 @@
   font-weight: 100 800; font-display: swap; font-style: normal;
 }
 
-/* ── Modo oscuro (base) ───────────────────────────────────────── */
+/* ── Dark mode (base) ─────────────────────────────────────────── */
 :root {
   --bg:          #05070C;
   --bg-soft:     #090C13;
@@ -61,7 +61,7 @@
   --font-mono:    "JetBrains Mono", ui-monospace, monospace;
 }
 
-/* ── Modo claro (PREDETERMINADO) ──────────────────────────────── */
+/* ── Light mode (DEFAULT) ─────────────────────────────────────── */
 body[data-theme="light"] {
   --bg:          #F6F8FC;
   --bg-soft:     #EDF1F8;
@@ -93,14 +93,14 @@ body {
 
 h1, h2, h3 { font-family: var(--font-display); margin: 0; letter-spacing: -0.01em; }
 
-/* ── Barra superior ───────────────────────────────────────────── */
+/* ── Top bar ──────────────────────────────────────────────────── */
 .top {
   position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
-  /* El notch del iPhone: sin esto la barra se mete debajo. */
+  /* The iPhone notch: without this the bar slides underneath it. */
   padding-top: calc(12px + env(safe-area-inset-top));
 }
 .brand { font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: -0.02em; }
@@ -132,13 +132,13 @@ h1, h2, h3 { font-family: var(--font-display); margin: 0; letter-spacing: -0.01e
 }
 .iconbtn:hover { background: var(--blue-ghost); }
 
-/* ── Navegación ───────────────────────────────────────────────── */
+/* ── Navigation ───────────────────────────────────────────────── */
 .nav {
   display: flex; gap: 4px;
   padding: 8px 16px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
-  /* A 390 px las seis áreas no caben: se deslizan en vez de romper la fila. */
+  /* At 390 px the six areas don't fit: they scroll instead of breaking the row. */
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -153,13 +153,13 @@ h1, h2, h3 { font-family: var(--font-display); margin: 0; letter-spacing: -0.01e
 .nav button:hover { color: var(--text); background: var(--blue-ghost); }
 .nav button[aria-current="page"] { color: var(--blue-bright); background: var(--blue-ghost); font-weight: 600; }
 
-/* ── Contenido ────────────────────────────────────────────────── */
+/* ── Content ──────────────────────────────────────────────────── */
 main { padding: 20px 16px 48px; max-width: 1100px; margin: 0 auto; }
 
 .grid {
   display: grid;
-  /* auto-fit + minmax: una columna en el teléfono, tres en el escritorio, sin
-     media queries que haya que mantener. */
+  /* auto-fit + minmax: one column on a phone, three on desktop, with no media
+     queries to maintain. */
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: 12px;
 }
@@ -190,7 +190,7 @@ main { padding: 20px 16px 48px; max-width: 1100px; margin: 0 auto; }
 .bar { height: 4px; background: var(--bg-soft); border-radius: var(--radius-full); overflow: hidden; margin-top: 10px; }
 .bar > i { display: block; height: 100%; background: var(--blue-bright); border-radius: var(--radius-full); }
 
-/* ── Pantalla de acceso ───────────────────────────────────────── */
+/* ── Sign-in screen ───────────────────────────────────────────── */
 .gate { min-height: 100dvh; display: grid; place-items: center; padding: 24px; }
 .gate .card { max-width: 420px; text-align: center; }
 .gate h1 { font-size: 22px; margin-bottom: 8px; }
@@ -209,10 +209,10 @@ main { padding: 20px 16px 48px; max-width: 1100px; margin: 0 auto; }
   * { transition: none !important; animation: none !important; }
 }
 
-/* ── Chat y aprobaciones (Fase 2) ─────────────────────────────────
-   Se reutilizan los tokens Spectra ya definidos arriba: ni un color nuevo.
-   El hilo scrollea por dentro y la caja de escribir queda fija abajo, que es
-   lo que espera cualquiera que haya usado un chat. */
+/* ── Chat and approvals (Phase 2) ─────────────────────────────────
+   Reuses the Spectra tokens defined above: not a single new color.
+   The thread scrolls inside and the text box stays fixed at the bottom, which
+   is what anyone who has used a chat expects. */
 
 .chat { display: flex; flex-direction: column; gap: 12px; min-height: 60vh; }
 .hilo { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 4px; }
@@ -223,14 +223,14 @@ main { padding: 20px 16px 48px; max-width: 1100px; margin: 0 auto; }
 .msg.yo { align-self: flex-end; background: var(--blue-ghost); border-color: var(--blue); }
 .msg.agente { align-self: flex-start; background: var(--panel-2); }
 
-/* Los pasos intermedios se ven, pero no compiten con la conversación. */
+/* Intermediate steps are visible, but don't compete with the conversation. */
 .paso { font-size: 13px; color: var(--muted); padding: 4px 2px; overflow-wrap: anywhere; }
 .paso b { color: var(--muted-2); font-weight: 600; }
 .paso.malo { color: var(--amber); }
 .paso.pensando { color: var(--blue-bright); }
 
-/* La aprobación NO es un modal a propósito: un modal tapa justo la
-   conversación que hace falta leer para decidir. */
+/* The approval is NOT a modal on purpose: a modal covers exactly the
+   conversation you need to read in order to decide. */
 .aprobacion { border: 1px solid var(--amber); border-radius: var(--radius-md);
               background: var(--panel); padding: 14px; display: flex;
               flex-direction: column; gap: 8px; }
@@ -257,8 +257,8 @@ main { padding: 20px 16px 48px; max-width: 1100px; margin: 0 auto; }
         border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel); }
 .fila .titulo { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* A 390 px no puede desbordarse ni un píxel: es el ancho en el que se
-   verifica este panel. */
+/* At 390 px not a single pixel may overflow: it's the width this dashboard
+   is verified at. */
 @media (max-width: 480px) {
   .msg { max-width: 100%; }
   .entrada { flex-direction: column; align-items: stretch; }
@@ -268,20 +268,19 @@ main { padding: 20px 16px 48px; max-width: 1100px; margin: 0 auto; }
 .controles select { font: inherit; padding: 8px 10px; border-radius: var(--radius-md);
                     border: 1px solid var(--line); background: var(--panel); color: inherit; }
 
-/* ── Historial de chats y ubicación ───────────────────────────────
-   Ni un color nuevo: todo sale de los tokens Spectra de arriba.
+/* ── Chat history and location ────────────────────────────────────
+   Not a single new color: everything comes from the Spectra tokens above.
 
-   El historial es una columna a la izquierda en el escritorio y un
-   desplegable arriba en el teléfono. Es el MISMO markup —un <details>— y no
-   dos árboles: duplicarlo garantiza que un día se arregle un fallo en uno y
-   no en el otro. */
+   The history is a left column on desktop and a dropdown on top on a phone.
+   It's the SAME markup — one <details> — not two trees: duplicating it
+   guarantees that one day a bug gets fixed in one and not the other. */
 
 .chat-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
-/* `min-width: 0` en toda la cadena, y no solo en el texto que se corta. Un
-   hijo de grid o de flex vale `auto` por defecto, así que un título largo
-   ensancha la columna entera y el panel se sale a lo ancho — a 390 px se
-   nota: la barra superior se desplaza y aparece scroll horizontal. El
-   text-overflow no puede recortar nada si nadie le pone un límite arriba. */
+/* `min-width: 0` along the whole chain, not just on the truncated text. A grid
+   or flex child defaults to `auto`, so a long title widens the whole column
+   and the dashboard overflows sideways — at 390 px you notice: the top bar
+   shifts and horizontal scroll appears. text-overflow can't trim anything if
+   nobody sets a limit above it. */
 .chats, .chat, .chats-cuerpo, .chat-item, .chat-cabeza { min-width: 0; }
 
 .chats > details { border: 1px solid var(--line); border-radius: var(--radius-md);
@@ -292,8 +291,8 @@ main { padding: 20px 16px 48px; max-width: 1100px; margin: 0 auto; }
 .chats summary .etiqueta { font-family: var(--font-display); font-weight: 600; font-size: 13px; flex: 1; }
 .chats summary .mono { color: var(--muted-2); }
 .chats-cuerpo { display: flex; flex-direction: column; gap: 4px; padding: 0 8px 8px;
-                /* Veinticinco conversaciones no pueden empujar el chat fuera
-                   de la pantalla: la columna scrollea por dentro. */
+                /* Twenty-five conversations can't push the chat off the
+                   screen: the column scrolls inside. */
                 max-height: 62vh; overflow-y: auto; }
 .chats .nuevo { width: 100%; margin-bottom: 6px; padding: 8px 12px; font-size: 14px; }
 
@@ -308,7 +307,7 @@ main { padding: 20px 16px 48px; max-width: 1100px; margin: 0 auto; }
                      font-size: 14px; }
 .chat-item .linea2 { color: var(--muted-2); }
 
-/* El punto de estado: verde solo mientras algo corre de verdad. */
+/* The status dot: green only while something is really running. */
 .punto { width: 7px; height: 7px; border-radius: var(--radius-full); flex: none;
          background: var(--muted-2); }
 .punto.vivo { background: var(--green); }
@@ -342,15 +341,15 @@ main { padding: 20px 16px 48px; max-width: 1100px; margin: 0 auto; }
 .pista { color: var(--muted-2); font-size: 12px; margin: 4px 0 0; }
 
 @media (max-width: 900px) {
-  /* Una columna: el historial arriba, plegado (lo pliega el propio Chat al
-     montar). El chat no puede quedar debajo de una lista de 25 filas. */
+  /* One column: the history on top, collapsed (Chat collapses it on mount).
+     The chat can't end up below a 25-row list. */
   .chat-layout { grid-template-columns: minmax(0, 1fr); }
   .chats-cuerpo { max-height: 46vh; }
 }
 
-/* ── Prospección por llamadas (Fase 3) ────────────────────────────
-   Pensado para el pulgar en el móvil: botones ≥48 px en dos columnas y el
-   teléfono enorme. Solo tokens existentes, ni un color nuevo. */
+/* ── Call prospecting (Phase 3) ───────────────────────────────────
+   Built for the thumb on a phone: ≥48 px buttons in two columns and a huge
+   phone number. Existing tokens only, not a single new color. */
 .pl-subnav { margin: -4px 0 12px; }
 .pl-barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
 .pl-select {

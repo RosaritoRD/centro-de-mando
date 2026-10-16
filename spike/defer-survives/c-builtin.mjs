@@ -1,17 +1,16 @@
-/* TEST DECISIVO — el mismo defer/resume, pero con una herramienta INTEGRADA
-   (Write) en vez de una MCP in-process.
+/* DECISIVE TEST — the same defer/resume, but with a BUILT-IN tool (Write)
+   instead of an in-process MCP one.
 
-   Aísla las dos hipótesis que quedan vivas:
+   It isolates the two hypotheses still standing:
 
-     · Si aquí SÍ se ejecuta  → el mecanismo defer/resume funciona, y lo que
-       está roto es solo el MCP in-process (`type: 'sdk'`, que los propios
-       tipos describen como "Not serializable"). Arreglo: sacar las
-       herramientas de APM del proceso.
-     · Si aquí TAMPOCO        → defer/resume no sirve para APM y hay que ir al
-       plan B de ARCHITECTURE.md §2.
+     · If it DOES run here   → the defer/resume mechanism works, and the only
+       broken part is in-process MCP (`type: 'sdk'`, which the types themselves
+       describe as "Not serializable"). Fix: move APM's tools out of process.
+     · If it does NOT run here either → defer/resume is no good for APM and we
+       go to plan B in ARCHITECTURE.md §2.
 
-   Los dos procesos van en el mismo archivo, separados por argv, para que la
-   única diferencia entre ellos sea la decisión del hook. */
+   Both processes live in the same file, split by argv, so the only difference
+   between them is the hook's decision. */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import fs from 'node:fs';
@@ -51,28 +50,28 @@ const base = {
 if (fase === 'a') {
   fs.rmSync(DIR, { recursive: true, force: true });
   fs.mkdirSync(DIR, { recursive: true });
-  console.log('── A: pide escribir y DIFIERE ──');
+  console.log('── A: asks to write and DEFERS ──');
   let r = null;
   for await (const m of query({
-    prompt: `Escribe el texto "gasto 12.50 cafe" en el archivo ${DESTINO}. Usa la herramienta Write.`,
+    prompt: `Write the text "expense 12.50 coffee" to the file ${DESTINO}. Use the Write tool.`,
     options: { ...base, hooks: hooks('defer') }
   })) { if (m.type === 'result') r = m; }
   console.log('  terminal_reason:', r.terminal_reason);
   console.log('  deferred:', r.deferred_tool_use?.name);
-  console.log('  archivo existe tras A:', fs.existsSync(DESTINO));
+  console.log('  file exists after A:', fs.existsSync(DESTINO));
   fs.writeFileSync(ESTADO, JSON.stringify({ session_id: r.session_id }));
   if (r.terminal_reason !== 'tool_deferred') process.exit(1);
 } else {
   const { session_id } = JSON.parse(fs.readFileSync(ESTADO, 'utf8'));
-  console.log('── B: proceso NUEVO, reanuda y APRUEBA ──');
-  console.log('  sesión:', session_id);
+  console.log('── B: NEW process, resumes and APPROVES ──');
+  console.log('  session:', session_id);
   let r = null;
   for await (const m of query({
     prompt: '',
     options: { ...base, resume: session_id, hooks: hooks('allow') }
   })) {
     if (m.type === 'system' && m.subtype === 'init') {
-      console.log('  [init] tools:', (m.tools || []).includes('Write') ? 'Write presente' : 'Write AUSENTE');
+      console.log('  [init] tools:', (m.tools || []).includes('Write') ? 'Write present' : 'Write MISSING');
     }
     if (m.type === 'assistant') {
       for (const b of m.message.content || []) {
@@ -83,9 +82,9 @@ if (fase === 'a') {
   }
   console.log('  terminal_reason:', r?.terminal_reason);
   const ok = fs.existsSync(DESTINO);
-  console.log('  archivo existe tras B:', ok);
-  if (ok) console.log('  contenido:', JSON.stringify(fs.readFileSync(DESTINO, 'utf8').trim()));
+  console.log('  file exists after B:', ok);
+  if (ok) console.log('  content:', JSON.stringify(fs.readFileSync(DESTINO, 'utf8').trim()));
   console.log(ok
-    ? '\n>>> defer/resume FUNCIONA con herramienta integrada'
-    : '\n>>> defer/resume NO funciona ni con herramienta integrada');
+    ? '\n>>> defer/resume WORKS with a built-in tool'
+    : '\n>>> defer/resume does NOT work even with a built-in tool');
 }

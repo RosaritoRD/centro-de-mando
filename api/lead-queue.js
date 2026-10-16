@@ -1,8 +1,8 @@
-/* Qué significa cada botón de resultado y a quién se llama después.
+/* What each outcome button means and who gets called next.
 
-   Todo en funciones puras: la API solo las aplica. Así las reglas que tienen
-   consecuencias legales (un "no me llames" DEBE suprimir el teléfono) se
-   prueban sin base de datos y no dependen de lo que mande el navegador. */
+   All pure functions: the API only applies them. That way the rules with
+   legal consequences (a "don't call me" MUST suppress the number) are tested
+   without a database and don't depend on what the browser sends. */
 
 export const RESULTADOS = ['no_contesto', 'buzon', 'no_interesa', 'interesado', 'llamar_luego', 'no_llamar', 'numero_malo', 'demo'];
 
@@ -15,26 +15,26 @@ const SUPRIME = new Set(['no_llamar', 'numero_malo']);
 const MAX_NOTAS = 5000;
 
 /**
- * Valida y resuelve un resultado de llamada.
+ * Validates and resolves a call outcome.
  * @returns {{ok:true, outcome, notes, callAgain, nextCallAt, suppress, leadStatus} | {ok:false, code, message}}
  */
 export function reglasDeResultado(input = {}, ahora = new Date()) {
   const outcome = String(input.outcome || '');
   if (!RESULTADOS.includes(outcome)) return { ok: false, code: 'bad_outcome', message: 'resultado desconocido' };
   const notes = input.notes == null ? null : String(input.notes).trim() || null;
-  if (notes && notes.length > MAX_NOTAS) return { ok: false, code: 'notes_too_long', message: `las notas pasan de ${MAX_NOTAS} caracteres` };
+  if (notes && notes.length > MAX_NOTAS) return { ok: false, code: 'notes_too_long', message: `notes exceed ${MAX_NOTAS} characters` };
 
   const suppress = SUPRIME.has(outcome) ? outcome : null;
-  // Un "no llamar" gana siempre a lo que diga el formulario.
+  // A "do not call" always beats whatever the form says.
   let callAgain = suppress ? false : input.callAgain === true;
   let nextCallAt = null;
   if (callAgain) {
     const fecha = new Date(input.nextCallAt);
     if (!input.nextCallAt || Number.isNaN(fecha.getTime())) {
-      return { ok: false, code: 'next_call_required', message: 'para volver a llamar hace falta una fecha' };
+      return { ok: false, code: 'next_call_required', message: 'a call-back needs a date' };
     }
     if (fecha.getTime() <= ahora.getTime()) {
-      return { ok: false, code: 'next_call_past', message: 'la fecha para volver a llamar ya pasó' };
+      return { ok: false, code: 'next_call_past', message: 'the call-back date has already passed' };
     }
     nextCallAt = fecha.toISOString();
   }
@@ -42,10 +42,10 @@ export function reglasDeResultado(input = {}, ahora = new Date()) {
 }
 
 /**
- * Orden de llamada: primero los "volver a llamar" ya vencidos (el más antiguo
- * primero, que es el que lleva más esperando), después los nuevos (el más
- * reciente primero: una licencia recién sacada es un negocio que arranca).
- * Fuera: los reservados por otra pestaña y los que se llaman más adelante.
+ * Call order: first the overdue "call back" ones (oldest first, since it has
+ * waited longest), then the new ones (newest first: a freshly issued license is
+ * a business just getting started).
+ * Left out: those reserved by another tab and those scheduled for later.
  */
 export function ordenCola(leads, ahora = new Date()) {
   const t = ahora.getTime();

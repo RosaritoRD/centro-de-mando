@@ -1,51 +1,50 @@
-# H — Sistema de diseño Spectra: tokens reales extraídos del código
+# H — Spectra design system: real tokens extracted from the code
 
-> Extraídos de `/opt/tu web principal/css/styles.css` y `fonts.css` el 2026-08-02.
-> **No son una interpretación de tu brief: son los valores que hoy están en
-> producción en tu-dominio.com.** APM debe usarlos idénticos para que los dos
-> productos se vean de la misma familia.
+> Extracted from the main website's `css/styles.css` and `fonts.css` on 2026-08-02.
+> **They are not an interpretation of the brief: they are the values in
+> production today.** APM must use them unchanged so both products look like
+> they belong to the same family.
 
-## H.1 Paleta — modo oscuro (base)
+## H.1 Palette — dark mode (base)
 
 ```css
 :root {
-  /* Superficies */
-  --bg:          #05070C;   /* navy casi negro, fondo de página */
+  /* Surfaces */
+  --bg:          #05070C;   /* near-black navy, page background */
   --bg-soft:     #090C13;
-  --panel:       #0D1119;   /* tarjetas */
-  --panel-2:     #121724;   /* superficie elevada */
+  --panel:       #0D1119;   /* cards */
+  --panel-2:     #121724;   /* raised surface */
   --line:        rgba(244, 247, 251, 0.09);
   --line-strong: rgba(244, 247, 251, 0.16);
 
-  /* Texto */
+  /* Text */
   --text:    #F4F7FB;
   --muted:   #97A1B4;
   --muted-2: #6B7385;
 
-  /* Acentos */
-  --blue:        #0C7BEB;   /* Azul de marca — del logo */
-  --blue-bright: #3B9DFF;   /* acentos y glow sobre negro */
+  /* Accents */
+  --blue:        #0C7BEB;   /* Brand Blue — from the logo */
+  --blue-bright: #3B9DFF;   /* accents and glow on black */
   --blue-deep:   #0A5FB8;
   --blue-ghost:  rgba(12, 123, 235, 0.12);
 
-  /* Semánticos */
+  /* Semantic */
   --green: #2BD576;
   --amber: #F5B84D;
   --red:   #F16063;
 }
 ```
 
-## H.2 Paleta — modo claro
+## H.2 Palette — light mode
 
-⚠️ **Corrección a tu brief.** Escribiste "toggle de modo claro", lo que sugiere que
-el oscuro es el predeterminado. En el código es al revés: el comentario dice
-literalmente *"Tema CLARO (predeterminado — el snippet del `<body>` lo aplica antes
-del primer pintado; el oscuro se elige con el botón sol/luna)"*. Coincide con tu
-memoria `gating-suscripcion` ("tema claro default").
+⚠️ **Correction to the brief.** It said "light mode toggle", which suggests dark
+is the default. In the code it's the other way round: the comment literally says
+*"LIGHT theme (default — the `<body>` snippet applies it before the first paint;
+dark is chosen with the sun/moon button)"*.
 
-**APM debe arrancar en claro también**, o los dos productos se sentirán distintos.
+**APM must also start in light mode**, or the two products will feel different.
 
-Selector: **`body[data-theme="light"]`** (no `:root`, no `prefers-color-scheme`).
+Selector: **`body[data-theme="light"]`** (not `:root`, not `prefers-color-scheme`).
 
 ```css
 body[data-theme="light"] {
@@ -58,14 +57,14 @@ body[data-theme="light"] {
   --text:        #0B1220;
   --muted:       #4B5568;
   --muted-2:     #6E7890;
-  --blue-bright: #0C7BEB;   /* sobre blanco el azul del logo no necesita glow */
+  --blue-bright: #0C7BEB;   /* on white the logo blue needs no glow */
   --blue-ghost:  rgba(12, 123, 235, 0.09);
   --glow-blue:   0 0 30px rgba(12,123,235,.16), 0 0 80px rgba(12,123,235,.05);
   --shadow-card: 0 8px 26px rgba(15, 30, 60, 0.10);
 }
 ```
 
-## H.3 Radios, sombras, movimiento
+## H.3 Radii, shadows, motion
 
 ```css
 --radius-xs: 8px;   --radius-sm: 12px;  --radius-md: 16px;
@@ -78,7 +77,7 @@ body[data-theme="light"] {
 --dur-1: 150ms;  --dur-2: 260ms;  --dur-3: 550ms;
 ```
 
-## H.4 Tipografía — **self-hosted, no Google Fonts**
+## H.4 Typography — **self-hosted, no Google Fonts**
 
 ```css
 --font-display: "Sora", "Inter", system-ui, sans-serif;
@@ -86,29 +85,30 @@ body[data-theme="light"] {
 --font-mono:    "JetBrains Mono", ui-monospace, monospace;
 ```
 
-Las tres son **variable fonts woff2 servidas desde tu propio dominio**
+All three are **variable woff2 fonts served from your own domain**
 (`assets/fonts/sora-latin-var.woff2`, `inter-latin-var.woff2`,
-`jetbrains-mono-latin-var.woff2`). Esto fue deliberado (memoria
-`about-cases-fonts`: sin Google Fonts, CSP endurecida).
+`jetbrains-mono-latin-var.woff2`). This was deliberate: no Google Fonts and a
+hardened CSP.
 
-**Consecuencia para APM:** copiar los tres `.woff2` al proyecto y declararlos con
-`@font-face` propio. Cualquier librería de UI que quiera meter Google Fonts vía
-`<link>` **rompe la CSP** — es un criterio de descarte para el informe C.
+**Consequence for APM:** copy the three `.woff2` files into the project and
+declare them with its own `@font-face`. Any UI library that wants to inject
+Google Fonts via `<link>` **breaks the CSP** — it's a rule-out criterion for
+report C.
 
-## H.5 Restricciones heredadas que APM debe respetar
+## H.5 Inherited constraints APM must respect
 
-1. **CSP con hash único** (memoria `security-hardening`): el snippet inline
-   que aplica el tema antes del primer pintado va firmado por hash. Si se edita el
-   snippet, hay que recalcular el hash. APM necesita el mismo patrón anti-parpadeo.
-2. **Sin JS externo de CDN.** Todo vendorizado. Otro criterio de descarte para
-   librerías de UI que asuman CDN.
-3. **Cache busting por contenido**: en `tu web principal` es `node tools/cachebust.js`.
-   Si APM usa un bundler (Vite/Next), el hash de build lo resuelve solo — es un
-   punto **a favor** de un stack con bundler, no en contra.
-4. **Móvil primero de verdad**: trabajas desde el teléfono con Termius/navegador.
-   El chat de agentes y las tablas de leads tienen que ser usables a 390 px.
+1. **CSP with a single hash**: the inline snippet that applies the theme before
+   the first paint is signed by hash. If the snippet is edited, the hash has to
+   be recalculated. APM needs the same anti-flicker pattern.
+2. **No external CDN JS.** Everything vendored. Another rule-out criterion for UI
+   libraries that assume a CDN.
+3. **Content-based cache busting**: on the main website it's
+   `node tools/cachebust.js`. If APM uses a bundler (Vite/Next), the build hash
+   handles it — a point **in favor** of a bundler stack, not against.
+4. **Truly mobile first**: the owner works from a phone (Termius/browser). The
+   agent chat and the lead tables must be usable at 390 px.
 
-## H.6 Fichero de marca
+## H.6 Brand file
 
-Existe `/opt/tu web principal/brand/BRAND_IDENTITY.md` — conviene leerlo íntegro antes de
-la Fase 1 para no re-derivar decisiones de marca ya tomadas.
+The main website has a `brand/BRAND_IDENTITY.md` — worth reading in full before
+Phase 1 so brand decisions already made aren't re-derived.

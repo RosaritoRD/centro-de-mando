@@ -1,47 +1,47 @@
-/* PROCESO B — proceso NUEVO. Reanuda por session_id y aprueba.
+/* PROCESS B — a NEW process. Resumes by session_id and approves.
 
-   Arranca sin nada en memoria del proceso A: lo único que recibe es lo que
-   estaba en disco. Es la simulación honesta de "el contenedor se reinició y
-   el dueño aprueba desde el móvil una hora después". */
+   It starts with nothing from process A in memory: all it gets is what was on
+   disk. It's the honest simulation of "the container restarted and the owner
+   approves from his phone an hour later". */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import fs from 'node:fs';
 import { hooks, OPCIONES_BASE, ESTADO, EFECTO } from './shared.mjs';
 
 const estado = JSON.parse(fs.readFileSync(ESTADO, 'utf8'));
-console.log('── PROCESO B (pid ' + process.pid + ') ──');
-console.log('  reanudando sesión:', estado.session_id);
-console.log('  herramienta pendiente:', estado.deferred_tool_use?.name);
+console.log('── PROCESS B (pid ' + process.pid + ') ──');
+console.log('  resuming session:', estado.session_id);
+console.log('  pending tool:', estado.deferred_tool_use?.name);
 
 let resultado = null;
 for await (const m of query({
-  /* Sin prompt nuevo: no se le pide nada más, solo que continúe lo que
-     quedó pendiente. Si hubiera que repetir la instrucción, el "defer" no
-     estaría reanudando nada — estaría empezando otra vez. */
-  prompt: 'Continúa.',
+  /* No new prompt: nothing more is asked, just to continue what was left
+     pending. If the instruction had to be repeated, the "defer" wouldn't be
+     resuming anything — it would be starting over. */
+  prompt: 'Continue.',
   options: {
     ...OPCIONES_BASE,
     resume: estado.session_id,
-    hooks: hooks('allow', 'aprobado por el dueño')
+    hooks: hooks('allow', 'approved by the owner')
   }
 })) {
   if (m.type === 'result') resultado = m;
 }
 
 console.log('  terminal_reason:', resultado?.terminal_reason);
-console.log('  coste USD:', resultado?.total_cost_usd);
+console.log('  cost USD:', resultado?.total_cost_usd);
 
 const efecto = fs.existsSync(EFECTO) ? fs.readFileSync(EFECTO, 'utf8').trim() : '';
-console.log('  efecto tras B:', JSON.stringify(efecto));
+console.log('  effect after B:', JSON.stringify(efecto));
 
-console.log('\n════════ VEREDICTO ════════');
-if (efecto.includes('café') || /caf/i.test(efecto)) {
-  console.log('SOBREVIVE: la aprobación diferida se resolvió en un proceso');
-  console.log('           distinto y la herramienta SE EJECUTÓ.');
-  console.log('coste total del spike USD:', (estado.coste_a + (resultado?.total_cost_usd || 0)).toFixed(6));
+console.log('\n════════ VERDICT ════════');
+if (/coffee|caf/i.test(efecto)) {
+  console.log('SURVIVES: the deferred approval was resolved in a different');
+  console.log('          process and the tool RAN.');
+  console.log('total spike cost USD:', (estado.coste_a + (resultado?.total_cost_usd || 0)).toFixed(6));
   process.exit(0);
 } else {
-  console.log('NO SOBREVIVE: el proceso B reanudó pero la herramienta no se');
-  console.log('              ejecutó. Toca el plan B (ver ARCHITECTURE.md §2).');
+  console.log('DOES NOT SURVIVE: process B resumed but the tool did not run.');
+  console.log('                  Time for plan B (see ARCHITECTURE.md §2).');
   process.exit(2);
 }

@@ -1,14 +1,14 @@
-/* Las credenciales de una petición, en un solo sitio.
+/* A request's credentials, in one place.
 
-   Esta regla viene prestada de tu web principal, donde no existir costó un bug caro:
-   tres puntos armaban la cabecera a mano y los tres se dejaron una credencial,
-   así que las fotos salían en gris sin un solo error visible. Aquí empieza
-   centralizado desde el primer commit.
+   This rule is borrowed from your main website, where its absence cost an expensive
+   bug: three places built the header by hand and all three left out a
+   credential, so photos came out grey without a single visible error. Here it
+   starts centralized from the first commit.
 
-   De momento no hay cabecera que poner: la cookie __session viaja sola porque
-   su Domain es .tu-dominio.com y esto se sirve desde apm.tu-dominio.com. Basta
-   con `credentials: 'same-origin'`. Cuando haga falta un token de MFA o un
-   X-Request-Id, se añade AQUÍ. */
+   For now there's no header to set: the __session cookie travels on its own
+   because its Domain is .your-domain.com and this is served from
+   apm.your-domain.com. `credentials: 'same-origin'` is enough. When an MFA token
+   or an X-Request-Id is needed, it gets added HERE. */
 
 export class ApiError extends Error {
   constructor(status, code, message) {
@@ -26,7 +26,7 @@ export async function api(path, opts = {}) {
   });
 
   let body = null;
-  try { body = await res.json(); } catch { /* respuestas sin JSON */ }
+  try { body = await res.json(); } catch { /* responses without JSON */ }
 
   if (!res.ok) {
     const err = (body && body.error) || {};

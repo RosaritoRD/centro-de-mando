@@ -1,5 +1,5 @@
-/* Hora local ↔ instante UTC, con dos pasadas para el cambio de hora.
-   Sin dependencias: Intl basta y en la imagen ya está la base de zonas. */
+/* Local time ↔ UTC instant, with two passes for daylight saving changes.
+   No dependencies: Intl is enough and the image already has the zone database. */
 
 export function partesLocales(fecha, zona) {
   const p = new Intl.DateTimeFormat('en-US', {
@@ -9,7 +9,7 @@ export function partesLocales(fecha, zona) {
   return { y: n('year'), m: n('month'), d: n('day'), h: n('hour'), min: n('minute') };
 }
 
-/** Instante UTC de y-m-d h:min en `zona`. */
+/** UTC instant of y-m-d h:min in `zona`. */
 export function horaEnZona(y, m, d, h, min, zona) {
   const objetivo = Date.UTC(y, m - 1, d, h, min);
   let utc = objetivo;

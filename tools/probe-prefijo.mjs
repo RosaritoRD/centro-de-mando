@@ -1,11 +1,11 @@
-/* ¿De dónde salen los ~25.000 tokens que se cachean en cada conversación?
+/* Where do the ~25,000 tokens cached in every conversation come from?
 
-   Un "Hola" costó $0.0939 con 2 tokens de entrada y 26 de salida: el coste
-   entero era la ESCRITURA EN CACHÉ de un prefijo de 24.937 tokens. Antes de
-   optimizar a ciegas hay que saber si ese prefijo es el system prompt del
-   preset claude_code o las definiciones de las herramientas.
+   A "Hello" cost $0.0939 with 2 input tokens and 26 output tokens: the whole
+   cost was the CACHE WRITE of a 24,937-token prefix. Before optimizing blind,
+   we need to know whether that prefix is the claude_code preset's system
+   prompt or the tool definitions.
 
-   Tres configuraciones, mismo prompt, mismo modelo barato. La respuesta es
+   Several configurations, same prompt, same cheap model. The answer is
    `cache_creation_input_tokens`. */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
@@ -13,12 +13,12 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 const TODAS = ['Read', 'Glob', 'Grep', 'WebSearch', 'Bash', 'Write', 'Edit', 'NotebookEdit'];
 
 const CASOS = [
-  { etiqueta: 'actual (8 tools, preset por defecto)', tools: TODAS },
-  { etiqueta: 'sin herramientas, preset por defecto', tools: [] },
-  { etiqueta: 'sin herramientas + systemPrompt propio', tools: [],
-    systemPrompt: 'Eres el orquestador de tu empresa. Responde en español, breve.' },
-  { etiqueta: '3 tools + systemPrompt propio', tools: ['Read', 'Glob', 'Grep'],
-    systemPrompt: 'Eres el orquestador de tu empresa. Responde en español, breve.' }
+  { etiqueta: 'current (8 tools, default preset)', tools: TODAS },
+  { etiqueta: 'no tools, default preset', tools: [] },
+  { etiqueta: 'no tools + own systemPrompt', tools: [],
+    systemPrompt: 'You are the Acme orchestrator. Reply briefly.' },
+  { etiqueta: '3 tools + own systemPrompt', tools: ['Read', 'Glob', 'Grep'],
+    systemPrompt: 'You are the Acme orchestrator. Reply briefly.' }
 ];
 
 for (const c of CASOS) {
@@ -33,12 +33,12 @@ for (const c of CASOS) {
   };
   let r = null;
   try {
-    for await (const m of query({ prompt: 'Hola', options: opciones })) {
+    for await (const m of query({ prompt: 'Hello', options: opciones })) {
       if (m.type === 'result') r = m;
     }
     const u = r?.usage || {};
     console.log(
-      `${String(u.cache_creation_input_tokens ?? 0).padStart(7)} tok cacheados · ` +
+      `${String(u.cache_creation_input_tokens ?? 0).padStart(7)} tok cached · ` +
       `$${Number(r?.total_cost_usd || 0).toFixed(6)} · ${c.etiqueta}`);
   } catch (e) {
     console.log(`  ERROR · ${c.etiqueta} · ${e.message}`);

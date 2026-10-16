@@ -1,10 +1,10 @@
-/* Piezas compartidas por las fuentes de leads. */
+/* Pieces shared by the lead sources. */
 
 import { normalizarTelefono } from '../phone.js';
 
 const SIGLAS = new Set(['LLC', 'INC', 'CORP', 'LTD', 'NY', 'NYC', 'NJ', 'USA', 'DBA', 'II', 'III', 'HVAC', 'LP', 'PC']);
 
-/** "EJEMPLO GENERAL CONSTRUCTION LLC" → "Ejemplo General Construction LLC". */
+/** "EXAMPLE GENERAL CONSTRUCTION LLC" → "Example General Construction LLC". */
 export function nombreBonito(texto) {
   return String(texto || '').trim().replace(/\s+/g, ' ').toLowerCase()
     .replace(/[a-z0-9&'.]+/g, (w) => {
@@ -14,16 +14,16 @@ export function nombreBonito(texto) {
     .replace(/,\s*/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-/** Solo http(s): una ficha pública de Maps podría traer "javascript:…" y acabar en un href. */
+/** http(s) only: a public Maps listing could carry "javascript:…" and end up in an href. */
 export function webSegura(url) {
   const u = String(url || '').trim();
   return /^https?:\/\/[^\s]+$/i.test(u) && u.length <= 500 ? u : null;
 }
 
 /**
- * Filas crudas → leads normalizados. `mapear(fila)` devuelve el lead sin
- * teléfono normalizado; aquí se normaliza, se descartan inválidos y se
- * deduplica dentro del mismo lote.
+ * Raw rows → normalized leads. `mapear(fila)` returns the lead without a
+ * normalized phone; here it gets normalized, invalid ones are dropped and the
+ * batch is deduplicated.
  */
 export function normalizarLote(filas, mapear) {
   const vistos = new Set();

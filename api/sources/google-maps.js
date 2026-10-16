@@ -1,13 +1,13 @@
-/* Fuente Google Maps — scraper gosom/google-maps-scraper en su modo web (REST).
+/* Google Maps source — gosom/google-maps-scraper in its web (REST) mode.
 
-   ⚠ Decisión de el dueño (24/09/2026): se usa asumiendo el riesgo de los ToS de
-   Google. Por eso:
-   - todo lead de aquí es internal_only = true (la versión para clientes no lo ve);
-   - la búsqueda es SUAVE: 1 a la vez, 3 al día, máx. 100 resultados, siempre a mano;
-   - corre en su propio contenedor, sin puertos públicos (servicio gmaps-scraper).
+   ⚠ the owner's decision (24/09/2026): it's used accepting the risk under Google's
+   ToS. That's why:
+   - every lead from here is internal_only = true (the customer version never sees it);
+   - searching is GENTLE: 1 at a time, 3 a day, max 100 results, always by hand;
+   - it runs in its own container, with no public ports (gmaps-scraper service).
 
-   Los límites se comprueban aquí (función pura) y el contenedor además corre
-   con -c 1 y un solo navegador. */
+   The limits are checked here (pure function) and the container also runs
+   with -c 1 and a single browser. */
 
 import { nombreBonito, normalizarLote } from './common.js';
 
@@ -15,10 +15,10 @@ export const LIMITES_GMAPS = { porDia: 3, simultaneos: 1, maxResultados: 100 };
 
 export function comprobarLimites({ corriendo, hoy }, limites = LIMITES_GMAPS) {
   if (corriendo >= limites.simultaneos) {
-    return { ok: false, status: 409, code: 'scrape_busy', message: 'ya hay una búsqueda de Google Maps en marcha' };
+    return { ok: false, status: 409, code: 'scrape_busy', message: 'a Google Maps search is already running' };
   }
   if (hoy >= limites.porDia) {
-    return { ok: false, status: 429, code: 'scrape_daily_limit', message: `límite de ${limites.porDia} búsquedas de Google Maps por día` };
+    return { ok: false, status: 429, code: 'scrape_daily_limit', message: `limit of ${limites.porDia} Google Maps searches per day` };
   }
   return { ok: true };
 }
@@ -26,8 +26,8 @@ export function comprobarLimites({ corriendo, hoy }, limites = LIMITES_GMAPS) {
 export function leadsDesdeGmaps(filas, { location = null } = {}) {
   const r = normalizarLote(filas.slice(0, LIMITES_GMAPS.maxResultados), (f) => {
     const zip = /\b(\d{5})(?:-\d{4})?\b/.exec(f.address || '')?.[1] || null;
-    // "741 Lydig Ave, Bronx, NY 10462" → "Bronx". La búsqueda por zona trae
-    // negocios de barrios vecinos: la ciudad sale de la dirección, no de la búsqueda.
+    // "741 Lydig Ave, Bronx, NY 10462" → "Bronx". An area search brings in
+    // businesses from nearby neighborhoods: the city comes from the address, not the search.
     const ciudad = /,\s*([^,]+),\s*[A-Z]{2}\s+\d{5}/.exec(f.address || '')?.[1]?.trim();
     return {
       businessName: nombreBonito(f.title),
@@ -44,7 +44,7 @@ export function leadsDesdeGmaps(filas, { location = null } = {}) {
   return { ...r, found: Math.min(filas.length, r.found) };
 }
 
-/** CSV (RFC 4180) → objetos. El scraper exporta CSV; sin dependencias. */
+/** CSV (RFC 4180) → objects. The scraper exports CSV; no dependencies. */
 export function parseCsv(texto) {
   const filas = [];
   let fila = [];
@@ -72,35 +72,35 @@ export function parseCsv(texto) {
 }
 
 /**
- * Cliente del REST del scraper. `base` = http://gmaps-scraper:8080 (red interna).
- * Crea el trabajo, espera a que termine (sondeando) y descarga el CSV.
+ * Client for the scraper's REST API. `base` = http://gmaps-scraper:8080 (internal network).
+ * Creates the job, waits for it to finish (polling) and downloads the CSV.
  */
 export async function buscarGmaps({ query, location, limit }, { base, fetch = globalThis.fetch, esperar = (ms) => new Promise((r) => setTimeout(r, ms)), maxMinutos = 20 } = {}) {
-  if (!base) throw new Error('GMAPS_SCRAPER_URL no está configurada');
+  if (!base) throw new Error('GMAPS_SCRAPER_URL is not configured');
   const texto = `${String(query || '').trim()} ${location ? `in ${location}` : ''}`.trim();
-  if (texto.length < 3 || texto.length > 120) throw new Error('búsqueda vacía o demasiado larga');
+  if (texto.length < 3 || texto.length > 120) throw new Error('search is empty or too long');
   const crear = await fetch(`${base}/api/v1/jobs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: `apm ${texto}`.slice(0, 60), keywords: [texto], lang: 'en', depth: 2, max_time: 600 })
   });
-  if (!crear.ok) throw new Error(`el scraper no aceptó el trabajo (${crear.status})`);
+  if (!crear.ok) throw new Error(`the scraper did not accept the job (${crear.status})`);
   const { id } = await crear.json();
-  if (!id) throw new Error('el scraper no devolvió id de trabajo');
+  if (!id) throw new Error('the scraper returned no job id');
 
   const limite = Date.now() + maxMinutos * 60_000;
   for (;;) {
     await esperar(15_000);
     const e = await fetch(`${base}/api/v1/jobs/${encodeURIComponent(id)}`);
-    if (!e.ok) throw new Error(`estado del trabajo: ${e.status}`);
+    if (!e.ok) throw new Error(`job status: ${e.status}`);
     const job = await e.json();
     const estado = String(job.status || job.Status || '').toLowerCase();
     if (estado === 'ok' || estado === 'done' || estado === 'completed') break;
-    if (estado === 'failed' || estado === 'error') throw new Error('el scraper marcó el trabajo como fallido');
-    if (Date.now() > limite) throw new Error(`el scraper no terminó en ${maxMinutos} min`);
+    if (estado === 'failed' || estado === 'error') throw new Error('the scraper marked the job as failed');
+    if (Date.now() > limite) throw new Error(`the scraper did not finish within ${maxMinutos} min`);
   }
   const d = await fetch(`${base}/api/v1/jobs/${encodeURIComponent(id)}/download`);
-  if (!d.ok) throw new Error(`descarga de resultados: ${d.status}`);
+  if (!d.ok) throw new Error(`results download: ${d.status}`);
   const filas = parseCsv(await d.text());
   return leadsDesdeGmaps(filas.slice(0, Math.min(limit || LIMITES_GMAPS.maxResultados, LIMITES_GMAPS.maxResultados)), { location });
 }

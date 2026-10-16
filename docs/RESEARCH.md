@@ -1,282 +1,291 @@
-# RESEARCH — Decisión de stack de APM
+# RESEARCH — APM stack decision
 
-**Fecha:** 2 de agosto de 2026
-**Estado:** cierre de la Fase 0. Este documento **no** repite los informes: los resuelve.
-**Para leer el detalle de cada tema:** `docs/research/A..H`.
+**Date:** August 2, 2026
+**Status:** end of Phase 0. This document does **not** repeat the reports: it resolves them.
+**For the detail on each topic:** `docs/research/A..H`.
 
-> Este documento y `ARCHITECTURE.md` son lo que se somete al **GATE 0**.
-> Todo lo marcado ✅ está verificado contra fuente primaria; ⚠️ es estimación o sin verificar.
-
----
-
-## 1. Qué es APM, en una frase
-
-> El centro de mando personal de tu empresa en `apm.tu-dominio.com`: una caja de chat con
-> agentes que **hacen** cosas (buscar leads, triar el correo, disparar automatizaciones,
-> vigilar los productos), con **aprobación humana** para todo lo que salga al exterior y
-> **coste medido** en cada ejecución.
-
-**Y lo que NO es**, para que nadie lo confunda a mitad de camino:
-
-- No es un producto para clientes. Es interno. Un usuario: el dueño. (Multi-tenant queda fuera
-  de la Fase 1-6; si algún día se vende, se replantea.)
-- No es un framework de agentes. Eso lo pone el Claude Agent SDK.
-- No es un reemplazo de n8n. n8n sigue ejecutando lo que ya ejecuta; APM lo dispara y lee.
-- No es una plataforma de observabilidad. Dos tablas y un panel, no ClickHouse.
+> This document and `ARCHITECTURE.md` are what goes through **GATE 0**.
+> Everything marked ✅ is verified against a primary source; ⚠️ is an estimate or unverified.
 
 ---
 
-## 2. Las cuatro decisiones abiertas — resueltas
+## 1. What APM is, in one sentence
 
-### Decisión 1 — ¿React sí o no?
+> The company's personal command center at `apm.your-domain.com`: a chat box with
+> agents that **do** things (find leads, triage email, trigger automations, watch
+> the products), with **human approval** for anything that goes outside and
+> **measured cost** for every run.
 
-**Recomendación: SÍ, pero React + Vite (SPA), NO Next.js.**
+**And what it is NOT**, so nobody gets confused halfway:
 
-| | Opción A — **Vite + React** ✅ recomendada | Opción B — Vanilla, como `tu web principal` |
+- It's not a customer product. It's internal. One user: the owner. (Multi-tenant
+  is out of scope for Phases 1-6; if it's ever sold, it gets rethought.)
+- It's not an agent framework. The Claude Agent SDK provides that.
+- It's not a replacement for n8n. n8n keeps running what it runs; APM triggers it
+  and reads it.
+- It's not an observability platform. Two tables and a panel, not ClickHouse.
+
+---
+
+## 2. The four open decisions — resolved
+
+### Decision 1 — React or not?
+
+**Recommendation: YES, but React + Vite (SPA), NOT Next.js.**
+
+| | Option A — **Vite + React** ✅ recommended | Option B — Vanilla, like the main website |
 |---|---|---|
-| UI de chat | `assistant-ui` resuelto (informe C) | Reescribir a mano streaming + tool UI + aprobaciones |
-| Coste de RAM en el servidor | **Cero.** El build ocurre al construir la imagen; nginx sirve estáticos | Cero |
-| Cache busting | Automático (hash de build) | `node tools/cachebust.js` a mano |
-| Stack nuevo en la VPS | Sí: Node de build + bundler | No |
-| Tiempo hasta el primer chat útil | Días | ⚠️ Semanas |
+| Chat UI | `assistant-ui` solves it (report C) | Hand-write streaming + tool UI + approvals |
+| Server RAM cost | **Zero.** The build happens when the image is built; nginx serves static files | Zero |
+| Cache busting | Automatic (build hash) | `node tools/cachebust.js` by hand |
+| New stack on the VPS | Yes: build-time Node + bundler | No |
+| Time to the first useful chat | Days | ⚠️ Weeks |
 
-El argumento decisivo **no es la moda, es el alcance**: la Fase 2 pide *chat con streaming +
-generative UI por herramienta + aprobación humana*. Eso es exactamente lo que `assistant-ui`
-regala y lo que en vanilla habría que escribir desde cero, mal, y mantener.
+The decisive argument **isn't fashion, it's scope**: Phase 2 calls for *streaming chat +
+per-tool generative UI + human approval*. That's exactly what `assistant-ui` gives
+for free and what vanilla would have to write from scratch, badly, and maintain.
 
-**Y el argumento en contra se cae al mirarlo:** el miedo razonable a React es "un servicio
-Node más comiendo RAM". Con **Vite (SPA, sin SSR) eso no pasa**: `npm run build` genera
-HTML/JS/CSS estáticos dentro del `Dockerfile`, y en producción solo corre **nginx**, igual
-que en `tu web principal`. Next.js sí traería un proceso Node en producción → **descartado**.
+**And the counter-argument falls apart on inspection:** the reasonable fear of React is
+"one more Node service eating RAM". With **Vite (SPA, no SSR) that doesn't happen**:
+`npm run build` produces static HTML/JS/CSS inside the `Dockerfile`, and in production only
+**nginx** runs, same as the main website. Next.js would bring a Node process into
+production → **ruled out**.
 
-Condiciones que hereda de H (no negociables): tokens Spectra idénticos, tema **claro por
-defecto** vía `body[data-theme="light"]`, fuentes self-hosted (nada de Google Fonts), sin
-CDN, y usable a **390 px**.
+Conditions inherited from H (non-negotiable): identical Spectra tokens, **light theme by
+default** via `body[data-theme="light"]`, self-hosted fonts (no Google Fonts), no CDN,
+and usable at **390 px**.
 
-### Decisión 2 — Presupuesto de RAM
+### Decision 2 — RAM budget
 
-**Recomendación: un techo explícito en el código, no una buena intención.**
+**Recommendation: an explicit ceiling in the code, not a good intention.**
 
-Punto de partida (G.1 ✅): 7,7 GB totales, **4,6 GB libres**, 2 núcleos, **1 GB de swap ya en uso**.
+Starting point (G.1 ✅): 7.7 GB total, **4.6 GB free**, 2 cores, **1 GB of swap already in use**.
 
-| Componente | Estimación | Nota |
+| Component | Estimate | Note |
 |---|---|---|
-| `apm-api` (Node + Express + pg) en reposo | ⚠️ 150-250 MB | A medir |
-| **Cada agente activo del SDK** | **~1 GiB** | Suelo *oficial*, "a floor, not the ceiling" ✅ (informe A) |
-| Worker Playwright de scraping (efímero) | ⚠️ 300-500 MB, solo mientras corre | Concurrencia 1 |
-| `apm-web` (nginx estáticos) | ~10 MB | |
-| pg-boss, BD `apm` | Despreciable | Reusan Postgres existente |
+| `apm-api` (Node + Express + pg) at rest | ⚠️ 150-250 MB | To be measured |
+| **Each active SDK agent** | **~1 GiB** | *Official* floor, "a floor, not the ceiling" ✅ (report A) |
+| Playwright scraping worker (throwaway) | ⚠️ 300-500 MB, only while running | Concurrency 1 |
+| `apm-web` (nginx static) | ~10 MB | |
+| pg-boss, `apm` DB | Negligible | Reuse the existing Postgres |
 
-→ **`MAX_CONCURRENT_RUNS=2`** como constante de configuración desde el primer commit, y el
-worker de scraping **no corre a la vez** que 2 agentes. Con 3 agentes simultáneos entramos en
-swap, y la VPS ya está tocando swap sin APM.
+→ **`MAX_CONCURRENT_RUNS=2`** as a config constant from the first commit, and the
+scraping worker **never runs at the same time** as 2 agents. With 3 simultaneous agents
+we hit swap, and the VPS already touches swap without APM.
 
-**Lo que este presupuesto descarta** (§6): Firecrawl, Langfuse+ClickHouse, Temporal/Restate/
-Inngest, un Postgres nuevo, cualquier navegador headless permanente adicional.
+**What this budget rules out** (§6): Firecrawl, Langfuse+ClickHouse, Temporal/Restate/
+Inngest, a new Postgres, any additional always-on headless browser.
 
-### Decisión 3 — Scheduler
+### Decision 3 — Scheduler
 
-**Recomendación: `pg-boss` dentro de APM.** ✅ Ya resuelto en el informe F y no hay motivo
-para reabrirlo: v12.26.4, MIT, **3 dependencias**, publicado el 1-ago-2026 ✅.
+**Recommendation: `pg-boss` inside APM.** ✅ Already settled in report F and there's no
+reason to reopen it: v12.26.4, MIT, **3 dependencies**, published 1-Aug-2026 ✅.
 
-El argumento que manda es la **atomicidad**: `INSERT` del dato **y** encolado del job en la
-misma transacción de Postgres. Con BullMQ+Redis eso es imposible (dos sistemas) y aparece el
-bug de "el job existe pero el dato no". Además el Redis existente es de n8n: un `FLUSHALL`
-ajeno se llevaría los jobs de APM. Postgres ya está respaldado y cifrado a R2.
+The argument that wins is **atomicity**: `INSERT` of the data **and** enqueueing of the job in
+the same Postgres transaction. With BullMQ+Redis that's impossible (two systems) and the
+"the job exists but the data doesn't" bug appears. Also, the existing Redis belongs to n8n:
+someone else's `FLUSHALL` would take APM's jobs with it. Postgres is already backed up and
+encrypted to R2.
 
-**Camino de ampliación anotado, no adoptado:** DBOS Transact (`@dbos-inc/dbos-sdk` 4.25.14,
-MIT, 6 deps ✅) da durabilidad de ejecución in-process sobre **el mismo Postgres**, sin
-infraestructura nueva. ⚠️ Sin verificar su convivencia con pg-boss. Spike futuro.
+**Expansion path noted, not adopted:** DBOS Transact (`@dbos-inc/dbos-sdk` 4.25.14, MIT,
+6 deps ✅) gives in-process execution durability on **the same Postgres**, with no new
+infrastructure. ⚠️ Its coexistence with pg-boss is unverified. Future spike.
 
-### Decisión 4 — n8n: MCP vs REST
+### Decision 4 — n8n: MCP vs REST
 
-**Recomendación: webhooks para disparar + REST API para monitorear.** ✅ Resuelto en F, con
-un hallazgo que lo cierra: **la REST API de n8n no tiene endpoint para ejecutar workflows** ✅.
-El MCP Server Trigger añade SSE, buffering tras NPM y sesiones largas a cambio de nada que
-webhook+API no den → **opcional, Fase 2**.
+**Recommendation: webhooks to trigger + REST API to monitor.** ✅ Settled in F, with a
+finding that closes it: **the n8n REST API has no endpoint to run workflows** ✅. The MCP
+Server Trigger adds SSE, buffering behind NPM and long sessions in exchange for nothing
+webhook+API don't give → **optional, Phase 2**.
 
-Regla de reparto ya acordada: *el que necesita saber si funcionó, es el que programa.*
+Agreed split rule: *whoever needs to know whether it worked is the one who schedules it.*
 
 ---
 
-## 3. El stack elegido
+## 3. The chosen stack
 
-| Capa | Elección | Informe |
+| Layer | Choice | Report |
 |---|---|---|
-| Runtime de agentes | **Claude Agent SDK** `@anthropic-ai/claude-agent-sdk` 0.3.220 ✅ | A |
-| Orquestación | **Propia** (control flow nuestro), patrón orquestador-worker solo si paraleliza | B |
-| Frontend | **Vite + React + assistant-ui**, servido como estáticos por nginx | C, H |
-| Backend | Node ≥18 + Express + `pg` (mismo patrón que `tu web principal`) | G |
-| Base de datos | BD **`apm`** nueva, rol **`apm_app`**, en el `n8n_postgres` existente ✅ | G |
-| Cola / cron | **pg-boss** 12.26.4 ✅ | F |
-| Auth | **Cookie SSO `__session`** de `.tu-dominio.com` + `restoreSession` obligatorio ✅ | G |
-| TLS / dominio | Wildcard `*.tu-dominio.com` ya activo en NPM → solo crear el Proxy Host ✅ | G |
-| Correo | Conector **IMAP propio de solo lectura** (`imapflow`) vía `createSdkMcpServer` | E |
-| Automatizaciones | **Webhook n8n** (disparo) + **REST API** (monitoreo) ✅ | F |
-| Leads | **Censo FMCSA** (gratis, dominio público) + enriquecimiento con Playwright efímero | D |
-| Observabilidad | **Tablas propias** con nombres de la semconv GenAI de OTel | B |
-| Diseño | Tokens **Spectra** reales, tema claro por defecto, fuentes self-hosted | H |
+| Agent runtime | **Claude Agent SDK** `@anthropic-ai/claude-agent-sdk` 0.3.220 ✅ | A |
+| Orchestration | **Our own** (our control flow), orchestrator-worker pattern only where it parallelizes | B |
+| Frontend | **Vite + React + assistant-ui**, served as static files by nginx | C, H |
+| Backend | Node ≥18 + Express + `pg` (same pattern as the main website) | G |
+| Database | New **`apm`** DB, **`apm_app`** role, in the existing `n8n_postgres` ✅ | G |
+| Queue / cron | **pg-boss** 12.26.4 ✅ | F |
+| Auth | **`__session` SSO cookie** from the parent domain + mandatory `restoreSession` ✅ | G |
+| TLS / domain | Wildcard `*.your-domain.com` already active in NPM → just create the Proxy Host ✅ | G |
+| Email | **Our own read-only IMAP** connector (`imapflow`) via `createSdkMcpServer` | E |
+| Automations | **n8n webhook** (trigger) + **REST API** (monitoring) ✅ | F |
+| Leads | **FMCSA census** (free, public domain) + throwaway-Playwright enrichment | D |
+| Observability | **Our own tables** with OTel GenAI semconv names | B |
+| Design | Real **Spectra** tokens, light theme by default, self-hosted fonts | H |
 
 ---
 
-## 4. Modelos y coste
+## 4. Models and cost
 
-IDs y precios **verificados** en esta sesión — esto **resuelve el riesgo 2 del informe A**
-("no cito ningún ID concreto para no inventarlo"):
+IDs and prices **verified** in this session — this **resolves risk 2 in report A**
+("I don't cite any specific ID so as not to invent it"):
 
-| Modelo | ID exacto | Contexto | Entrada $/MTok | Salida $/MTok |
+| Model | Exact ID | Context | Input $/MTok | Output $/MTok |
 |---|---|---|---|---|
 | Claude Opus 5 | `claude-opus-5` | 1M | **$5** | **$25** |
-| Claude Sonnet 5 | `claude-sonnet-5` | 1M | $3 (**$2 promo hasta 31-ago-2026**) | $15 (**$10 promo**) |
+| Claude Sonnet 5 | `claude-sonnet-5` | 1M | $3 (**$2 promo until 31-Aug-2026**) | $15 (**$10 promo**) |
 | Claude Haiku 4.5 | `claude-haiku-4-5` | 200K | $1 | $5 |
 
-**Caché de prompt** (la palanca de coste más grande y la más ignorada):
+**Prompt caching** (the biggest cost lever, and the most ignored):
 
-- Lectura de caché ≈ **0,1×** el precio de entrada.
-- Escritura de caché **1,25×** (TTL 5 min) o **2×** (TTL 1 h).
-- Punto de equilibrio: con TTL de 5 min, **a la segunda petición ya sale a cuenta**.
-- Mínimo cacheable: **512 tokens en Opus 5**, 1024 en Sonnet 5. Por debajo **no cachea y no
-  avisa** (`cache_creation_input_tokens: 0`).
+- Cache read ≈ **0.1×** the input price.
+- Cache write **1.25×** (5-min TTL) or **2×** (1-h TTL).
+- Break-even: with a 5-min TTL, **it already pays off on the second request**.
+- Minimum cacheable: **512 tokens on Opus 5**, 1024 on Sonnet 5. Below that it **doesn't
+  cache and doesn't warn you** (`cache_creation_input_tokens: 0`).
 
-**Reparto de modelos propuesto para APM:**
+**Proposed model split for APM:**
 
-| Trabajo | Modelo | Por qué |
+| Work | Model | Why |
 |---|---|---|
-| Orquestador / chat principal | `claude-opus-5` | Es quien decide; equivocarse aquí cuesta más que el token |
-| Subagentes de barrido (leads, resúmenes) | `claude-sonnet-5` | Volumen; y con la promo de agosto sale a mitad |
-| Clasificación y triaje de correo | `claude-haiku-4-5` | "¿esto es urgente sí/no?" no necesita Opus |
+| Orchestrator / main chat | `claude-opus-5` | It's the one deciding; mistakes here cost more than tokens |
+| Sweep subagents (leads, summaries) | `claude-sonnet-5` | Volume; and with the August promo it's half price |
+| Email classification and triage | `claude-haiku-4-5` | "is this urgent yes/no?" doesn't need Opus |
 
-⚠️ **Los precios NO se hardcodean.** Van en una tabla de configuración (`model_pricing`),
-porque cambian — la promo de Sonnet vence el **31-ago-2026** y si está en el código, el
-panel de costes empieza a mentir ese día en silencio.
+(In production the default ended up being Haiku for everything, with the option to move up
+from the chat: see `api/agent.js`.)
 
-**Reglas de coste que van al código, no a un documento:**
+⚠️ **Prices are NOT hard-coded.** They go in a config table (`model_pricing`), because they
+change — the Sonnet promo ends on **31-Aug-2026**, and if it's in the code the cost panel
+starts lying that day, silently.
 
-1. El prompt del sistema **se congela**. Nada de `new Date()` dentro: cualquier byte que
-   cambie al principio invalida toda la caché por detrás.
-2. Contabilizar con **`total_cost_usd` y `modelUsage`**, nunca con `usage` a secas: `usage`
-   **excluye los tokens de los subagentes** ✅ (corrección del informe A). Facturar por
-   `usage` sería subestimar el gasto real justo en las ejecuciones más caras.
-3. Tope de presupuesto **diario** en dólares. Al alcanzarlo, el orquestador se niega a
-   lanzar subagentes. Con el multiplicador **15×** del multi-agente ✅ (informe B), esto no
-   es una métrica bonita: es el freno de mano.
+**Cost rules that go into the code, not a document:**
+
+1. The system prompt **is frozen**. No `new Date()` inside: any byte that changes at the
+   start invalidates the whole cache behind it.
+2. Account with **`total_cost_usd` and `modelUsage`**, never with plain `usage`: `usage`
+   **excludes subagent tokens** ✅ (correction to report A). Billing by `usage` would
+   underestimate the real spend exactly on the most expensive runs.
+3. A **daily** budget cap in dollars. When reached, the orchestrator refuses to launch
+   subagents. With the multi-agent **15×** multiplier ✅ (report B), this isn't a pretty
+   metric: it's the handbrake.
 
 ---
 
-## 5. Cómo se relacionan las piezas
+## 5. How the pieces relate
 
 ```mermaid
 flowchart TB
-    U["el dueño — móvil o escritorio"] -->|"cookie __session"| NPM["Nginx Proxy Manager<br/>*.tu-dominio.com (wildcard ya activo)"]
-    NPM --> WEB["apm-web · nginx<br/>estáticos de Vite + assistant-ui"]
-    NPM -->|"/api + SSE sin buffering"| API
+    U["Owner — phone or desktop"] -->|"__session cookie"| NPM["Nginx Proxy Manager<br/>*.your-domain.com (wildcard already active)"]
+    NPM --> WEB["apm-web · nginx<br/>Vite static files + assistant-ui"]
+    NPM -->|"/api + SSE without buffering"| API
 
     subgraph API["apm-api · Node"]
-        LOOP["Control flow PROPIO<br/>topes de coste / iteraciones / deadline"]
-        SDK["Claude Agent SDK<br/>orquestador + subagentes"]
-        TOOLS["Herramientas in-process<br/>leads · inbox · n8n · infra"]
-        BOSS["pg-boss · cron y reintentos"]
+        LOOP["OUR OWN control flow<br/>cost / iteration / deadline caps"]
+        SDK["Claude Agent SDK<br/>orchestrator + subagents"]
+        TOOLS["In-process tools<br/>leads · inbox · n8n · infra"]
+        BOSS["pg-boss · cron and retries"]
     end
 
-    subgraph PG["n8n_postgres — BD apm (rol apm_app)"]
+    subgraph PG["n8n_postgres — apm DB (apm_app role)"]
         R["run · run_event · run_cost"]
         AP["approval"]
-        L["leads · supresión"]
+        L["leads · suppression"]
         M["messages"]
     end
 
     N8N["n8n · webhooks + REST"]
-    IMAP["IMAP: Gmail + Hostinger<br/>SOLO LECTURA"]
-    ANTH["API de Anthropic"]
+    IMAP["IMAP: Gmail + Hostinger<br/>READ-ONLY"]
+    ANTH["Anthropic API"]
 
     LOOP --> SDK --> ANTH
     SDK --> TOOLS
     LOOP --> R
     LOOP -->|"canUseTool + defer"| AP
-    AP -->|"aprobado ⇒ reanudar"| LOOP
+    AP -->|"approved ⇒ resume"| LOOP
     TOOLS --> L
     TOOLS --> M
     TOOLS --> N8N
     TOOLS --> IMAP
     BOSS --> LOOP
-    WEB -.->|"bandeja de aprobaciones"| AP
+    WEB -.->|"approvals inbox"| AP
 ```
 
 ---
 
-## 6. Descartes, con el motivo
+## 6. What was ruled out, and why
 
-Un descarte sin motivo se reabre solo dentro de tres meses. Estos no:
+A rejection without a reason reopens itself three months later. These won't:
 
-| Descartado | Motivo |
+| Ruled out | Reason |
 |---|---|
-| **Next.js** | Traería un proceso Node a producción. Vite da lo mismo con nginx. |
-| **Firecrawl** (self-host) | ⚠️ Su propio compose recomienda 4 vCPU / 8 GB solo para `api`. **Más RAM que la VPS entera.** |
-| **Langfuse** | Exige Postgres + **ClickHouse** + Redis + S3 ✅. Gastaría la RAM libre en mirar gráficos. |
-| **Helicone** | ⚠️ Adquirido por Mintlify (mar-2026), sin roadmap. |
-| **Temporal / Restate / Inngest** | Excelentes, pero son **un servidor más**. Para un solo usuario, Postgres + pg-boss cubren el requisito real. |
-| **BullMQ** | El Redis existente es de n8n. Sin atomicidad con nuestros datos. |
-| **MCP Server Trigger de n8n (Fase 1)** | SSE + buffering tras NPM a cambio de nada que webhook+API no den. |
-| **`builderz-labs/mission-control`** | Es un control plane *sobre* runtimes; APM necesita el agente **dentro**. Alpha, control de acceso incompleto ✅. |
-| **Scraping de Google Maps** | Peores datos que el censo FMCSA (gratis), más frágil, más riesgo legal, y proxies de pago. |
-| **Places API como origen del CRM** | Su política prohíbe almacenar el contenido; solo el `place_id` es indefinido ✅. |
-| **`yt-dlp` y comentarios de YouTube** | Los ToS prohíben literalmente "recolectar información que pueda identificar a una persona" ✅. |
-| **MCP de correo de terceros** | Un proceso con nuestras credenciales de buzón y salida a red. El conector propio es solo-lectura **por construcción**. |
-| **Un Postgres nuevo** | Ahorramos ~150-250 MB usando el existente, que además ya tiene backups cifrados verificados. |
+| **Next.js** | Would bring a Node process into production. Vite gives the same with nginx. |
+| **Firecrawl** (self-host) | ⚠️ Its own compose recommends 4 vCPU / 8 GB just for `api`. **More RAM than the whole VPS.** |
+| **Langfuse** | Requires Postgres + **ClickHouse** + Redis + S3 ✅. It would spend the free RAM on looking at charts. |
+| **Helicone** | ⚠️ Acquired by Mintlify (Mar-2026), no roadmap. |
+| **Temporal / Restate / Inngest** | Excellent, but each is **one more server**. For a single user, Postgres + pg-boss cover the real requirement. |
+| **BullMQ** | The existing Redis belongs to n8n. No atomicity with our data. |
+| **n8n MCP Server Trigger (Phase 1)** | SSE + buffering behind NPM in exchange for nothing webhook+API don't give. |
+| **`builderz-labs/mission-control`** | It's a control plane *over* runtimes; APM needs the agent **inside**. Alpha, incomplete access control ✅. |
+| **Google Maps scraping** | Worse data than the (free) FMCSA census, more fragile, more legal risk, and paid proxies. |
+| **Places API as the CRM's origin** | Its policy forbids storing the content; only the `place_id` is indefinite ✅. |
+| **`yt-dlp` and YouTube comments** | The ToS literally forbid "collecting information that could identify a person" ✅. |
+| **Third-party email MCP** | A process with our mailbox credentials and network egress. Our own connector is read-only **by construction**. |
+| **A new Postgres** | Using the existing one saves ~150-250 MB, and it already has verified encrypted backups. |
+
+(Note: Phase 3 later did add a gentle, internal-only Google Maps scraper next to NYC Open
+Data — see `api/sources/google-maps.js` for the limits that came with that decision.)
 
 ---
 
-## 7. Riesgos, por gravedad
+## 7. Risks, by severity
 
-| # | Riesgo | Impacto | Mitigación |
+| # | Risk | Impact | Mitigation |
 |---|---|---|---|
-| 1 | ⚠️ **`SessionStore` + `defer` sin probar.** No está confirmado que una aprobación diferida sobreviva al reinicio del contenedor | **Toda la arquitectura de aprobaciones** | **Spike nº1 de la Fase 2, antes de escribir nada más.** Si falla, plan B: la aprobación no pausa al agente, lo mata y se re-lanza con el contexto guardado |
-| 2 | ⚠️ **~1 GiB por agente es un suelo oficial, no una medición** | El techo de 2 concurrentes puede ser 1 | Medir en el spike antes de prometer nada |
-| 3 | ⚠️ **Licencia comercial del Agent SDK** sin leer (riesgo 1 del informe A) | Bloquea revender APM algún día | Leer los *Commercial ToS* antes de pensar en vender. **Para uso interno no bloquea la Fase 1** |
-| 4 | ⚠️ **CAN-SPAM: $53.088 por correo** y dirección postal obligatoria | Existencial si se envía mal | Decisión de negocio antes de la Fase 3 (§8). Envío = lo último que se construye |
-| 5 | ⚠️ **Cobertura real de DSP en el censo FMCSA** sin comprobar | La fuente de leads podría no cubrir el nicho | Descargar, filtrar por NJ/NY y **contar**. Barato, primer paso de la Fase 3 |
-| 6 | **Prompt injection por correo** | Un correo con instrucciones dentro moviendo al agente | Conector solo-lectura + saneado + envelope de contenido no confiable + aprobación humana para enviar (informe E §5) |
-| 7 | ⚠️ **Claves sin rotar** (memoria `secreto-en-git`: Stripe, Firebase, FLEET_CRED_KEY) | Ajeno a APM pero comparte VPS y Postgres | **Rotar antes de meter una credencial más** en esa máquina |
-| 8 | La VPS ya toca swap | Degradación de todo, no solo de APM | `MAX_CONCURRENT_RUNS=2` + vigilar; si no basta, la respuesta es más RAM, no más ingenio |
+| 1 | ⚠️ **`SessionStore` + `defer` untested.** It's not confirmed that a deferred approval survives a container restart | **The whole approval architecture** | **Spike #1 of Phase 2, before writing anything else.** If it fails, plan B: approval doesn't pause the agent, it kills it and relaunches with the saved context. (Resolved: SPIKE-01 and SPIKE-02 — it survives.) |
+| 2 | ⚠️ **~1 GiB per agent is an official floor, not a measurement** | The ceiling of 2 concurrent may be 1 | Measure in the spike before promising anything |
+| 3 | ⚠️ **The Agent SDK commercial license** unread (risk 1 in report A) | Blocks reselling APM someday | Read the *Commercial ToS* before thinking about selling. **For internal use it doesn't block Phase 1** |
+| 4 | ⚠️ **CAN-SPAM: $53,088 per email** and a mandatory postal address | Existential if sending goes wrong | A business decision before Phase 3 (§8). Sending = the last thing built |
+| 5 | ⚠️ **Real DSP coverage in the FMCSA census** unverified | The lead source might not cover the niche | Download, filter by NJ/NY and **count**. Cheap, first step of Phase 3. (Resolved: it doesn't — see `FASE3-fuente-leads.md`.) |
+| 6 | **Prompt injection via email** | An email with instructions inside steering the agent | Read-only connector + sanitizing + untrusted-content envelope + human approval to send (report E §5) |
+| 7 | ⚠️ **Unrotated keys** on the same server | Unrelated to APM but it shares the VPS and Postgres | **Rotate before adding one more credential** to that machine |
+| 8 | The VPS already touches swap | Everything degrades, not just APM | `MAX_CONCURRENT_RUNS=2` + watch it; if that's not enough, the answer is more RAM, not more cleverness |
 
 ---
 
-## 8. Cambios que propongo al PLAN
+## 8. Changes proposed to the PLAN
 
-1. **Fase 3** — cambiar *"Scraper de empresas (Google Maps) end-to-end"* por
-   **"Importador del censo FMCSA + enriquecimiento web"**. Más barato, más completo,
-   sin riesgo legal (informe D §8).
-2. **Fase 3** — añadir **tabla de supresión (bajas y rebotes)** como tarea explícita, no
-   como algo "que ya saldrá". Va antes del primer envío.
-3. **Fase 2** — la primera tarea deja de ser "Claude Agent SDK en el backend" y pasa a ser
-   el **spike de `SessionStore` + `defer`**. Todo lo demás depende de él.
-4. **Fase 1** — añadir `MAX_CONCURRENT_RUNS` y la tabla `model_pricing` a la migración 001.
-
----
-
-## 9. Lo que necesito de el dueño para pasar el GATE 0
-
-Cuatro respuestas. Las tres primeras no bloquean la Fase 1 si tardan; la cuarta sí.
-
-1. **¿React (Vite) o vanilla?** — recomiendo Vite. (Bloquea la Fase 1.)
-2. **¿Dirección postal para el correo comercial?** — buzón comercial/PO Box, **no la casa**.
-   (Bloquea la Fase 3, no la 1.)
-3. **¿Se contacta solo a EE. UU.?** — recomiendo sí, con filtro de país en el código.
-   (Bloquea la Fase 3.)
-4. **¿Presupuesto diario de tokens en dólares?** — necesito un número para poner el freno de
-   mano. Sugerencia de arranque: **$5/día**, ajustable desde el panel.
+1. **Phase 3** — replace *"Company scraper (Google Maps) end-to-end"* with
+   **"FMCSA census importer + web enrichment"**. Cheaper, more complete, no legal risk
+   (report D §8).
+2. **Phase 3** — add a **suppression table (unsubscribes and bounces)** as an explicit task,
+   not something that "will come up". It goes before the first send.
+3. **Phase 2** — the first task stops being "Claude Agent SDK in the backend" and becomes the
+   **`SessionStore` + `defer` spike**. Everything else depends on it.
+4. **Phase 1** — add `MAX_CONCURRENT_RUNS` and the `model_pricing` table to migration 001.
 
 ---
 
-## Anexo — Índice de informes
+## 9. What's needed from the owner to pass GATE 0
 
-| Informe | Tema | Estado |
+Four answers. The first three don't block Phase 1 if they take time; the fourth does.
+
+1. **React (Vite) or vanilla?** — Vite recommended. (Blocks Phase 1.)
+2. **Postal address for commercial email?** — a business mailbox/PO Box, **not the home
+   address**. (Blocks Phase 3, not 1.)
+3. **Contact the US only?** — yes recommended, with a country filter in the code.
+   (Blocks Phase 3.)
+4. **Daily token budget in dollars?** — a number is needed for the handbrake. Suggested
+   start: **$5/day**, adjustable from the dashboard.
+
+---
+
+## Appendix — Report index
+
+| Report | Topic | Status |
 |---|---|---|
-| `research/A-agent-sdk.md` | Claude Agent SDK: tipos, sesiones, `canUseTool`, hooks, coste | ✅ |
-| `research/B-arquitecturas.md` | Orquestador-worker, durabilidad, HITL, observabilidad | ✅ |
-| `research/C-ui-chat.md` | UI de chat y generative UI → assistant-ui | ✅ |
-| `research/D-scrapers-leads.md` | Leads de empresas y video + legal/ToS | ✅ |
-| `research/E-email.md` | Gmail + IMAP Hostinger, conector propio de solo lectura | ✅ |
-| `research/F-n8n-automatizaciones.md` | Puente n8n, scheduler, config SSE de NPM | ✅ |
-| `research/G-infra-real.md` | La VPS real: RAM, redes, Postgres, SSO, TLS | ✅ |
-| `research/H-spectra-tokens.md` | Tokens de diseño reales de `tu web principal` | ✅ |
+| `research/A-agent-sdk.md` | Claude Agent SDK: types, sessions, `canUseTool`, hooks, cost | ✅ |
+| `research/B-arquitecturas.md` | Orchestrator-worker, durability, HITL, observability | ✅ |
+| `research/C-ui-chat.md` | Chat UI and generative UI → assistant-ui | ✅ |
+| `research/D-scrapers-leads.md` | Company and video leads + legal/ToS | ✅ |
+| `research/E-email.md` | Gmail + Hostinger IMAP, our own read-only connector | ✅ |
+| `research/F-n8n-automatizaciones.md` | n8n bridge, scheduler, NPM SSE config | ✅ |
+| `research/G-infra-real.md` | The real VPS: RAM, networks, Postgres, SSO, TLS (kept private) | ✅ |
+| `research/H-spectra-tokens.md` | The main website's real design tokens | ✅ |

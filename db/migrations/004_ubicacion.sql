@@ -1,47 +1,47 @@
--- tu empresa — APM
--- Migración 004: desde dónde se consulta y dónde se buscan los leads.
+-- Acme — APM
+-- Migration 004: where queries come from and where leads are searched.
 --
--- Se aplica con:
+-- Apply with:
 --   docker exec -i n8n_postgres psql -U n8n -d apm < db/migrations/004_ubicacion.sql
 --
--- POR QUÉ
--- Hasta ahora el orquestador no sabía dónde está el dueño ni dónde tiene que
--- buscar. Un "búscame DSPs" sin ubicación devuelve lo que el modelo suponga,
--- que casi siempre es California o Londres. Y son DOS sitios distintos, no
--- uno: se consulta desde un lado (huso horario, mercado, leyes que aplican)
--- y se buscan clientes en otro. Meterlos en un solo campo obligaría a
--- elegir cuál se pierde.
+-- WHY
+-- Until now the orchestrator didn't know where the owner is or where it should
+-- search. A "find me DSPs" without a location returns whatever the model assumes,
+-- which is almost always California or London. And they're TWO different places,
+-- not one: you ask from one place (time zone, market, applicable laws)
+-- and look for clients in another. A single field would force you to
+-- choose which one to lose.
 --
--- Va en la ejecución y NO solo en un ajuste global: dentro de un mes hay que
--- poder abrir un chat viejo y saber con qué ubicación se lanzó. Un ajuste
--- global se sobreescribe y reescribe el pasado en silencio.
+-- It's stored on the run and NOT only in a global setting: a month from now you
+-- must be able to open an old chat and know which location it ran with. A
+-- global setting gets overwritten and silently rewrites the past.
 
 ALTER TABLE run ADD COLUMN IF NOT EXISTS base_city      TEXT;
-ALTER TABLE run ADD COLUMN IF NOT EXISTS base_country   TEXT;  -- ISO 3166-1 alfa-2
+ALTER TABLE run ADD COLUMN IF NOT EXISTS base_country   TEXT;  -- ISO 3166-1 alpha-2
 ALTER TABLE run ADD COLUMN IF NOT EXISTS target_city    TEXT;
 ALTER TABLE run ADD COLUMN IF NOT EXISTS target_country TEXT;
 
--- Sugerencias de ciudades ya usadas en el selector. Índice parcial: las filas
--- viejas sin ubicación son la mayoría y no aportan nada a esa lista.
+-- Suggestions of already-used cities for the picker. Partial index: old rows
+-- without a location are the majority and add nothing to that list.
 CREATE INDEX IF NOT EXISTS run_ubicacion_idx ON run (created_at DESC)
   WHERE base_city IS NOT NULL OR target_city IS NOT NULL;
 
--- ── Ajustes ────────────────────────────────────────────────────────
--- Clave/valor y no columnas: APM es de una persona y los ajustes que van a
--- salir (ubicación hoy, idioma o firma mañana) no merecen una migración cada
--- uno. JSONB para no tener que decidir hoy la forma de cada uno.
+-- ── Settings ───────────────────────────────────────────────────────
+-- Key/value, not columns: APM belongs to one person, and the settings to come
+-- (location today, language or signature tomorrow) don't deserve a migration
+-- each. JSONB so each one's shape doesn't have to be decided today.
 --
--- Sin DELETE a propósito, igual que el resto: un ajuste se sobreescribe.
+-- No DELETE on purpose, like everything else: a setting gets overwritten.
 CREATE TABLE IF NOT EXISTS setting (
   key        TEXT PRIMARY KEY,
   value      JSONB NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- La ubicación NO se siembra con la dirección real: se rellena desde el
--- panel. Sembrarla aquí metería un dato personal en un repo de GitHub.
+-- The location is NOT seeded with the real address: it's filled in from the
+-- dashboard. Seeding it here would put personal data into a GitHub repo.
 
--- ── Permisos ───────────────────────────────────────────────────────
+-- ── Permissions ────────────────────────────────────────────────────
 GRANT USAGE ON SCHEMA public TO apm_app;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO apm_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO apm_app;

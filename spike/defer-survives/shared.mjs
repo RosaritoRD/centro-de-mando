@@ -1,10 +1,10 @@
-/* Pieza común de los dos procesos del spike.
+/* Shared piece for the spike's two processes.
 
-   La herramienta tiene un EFECTO OBSERVABLE FUERA DEL PROCESO: escribe una
-   línea en un archivo. Es lo único que responde a la pregunta de verdad —
-   "¿se ejecutó?"— sin depender de lo que el modelo diga que hizo. Si el
-   proceso B termina diciendo "listo, gasto registrado" pero el archivo está
-   vacío, la respuesta es NO y da igual lo elocuente que fuera. */
+   The tool has an effect OBSERVABLE OUTSIDE THE PROCESS: it writes a line to a
+   file. It's the only thing that answers the real question — "did it run?" —
+   without depending on what the model says it did. If process B ends by saying
+   "done, expense logged" but the file is empty, the answer is NO, however
+   eloquent it was. */
 
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
@@ -15,12 +15,12 @@ export const DIR = '/tmp/apm-spike';
 export const EFECTO = path.join(DIR, 'efecto.log');
 export const ESTADO = path.join(DIR, 'estado.json');
 
-/* Modelo barato a propósito: el spike prueba fontanería, no inteligencia.
-   Lo paga el dueño y no hay razón para usar Opus en esto. */
+/* Cheap model on purpose: the spike tests plumbing, not intelligence.
+   the owner pays for it and there's no reason to use Opus here. */
 export const MODELO = 'claude-haiku-4-5';
 
 export const TOOL_NAME = 'registrar_gasto';
-/* Los nombres MCP llegan al hook con este prefijo. */
+/* MCP names reach the hook with this prefix. */
 export const TOOL_FQN = `mcp__spike__${TOOL_NAME}`;
 
 export function prepararDir() {
@@ -30,34 +30,33 @@ export function prepararDir() {
 export const servidor = createSdkMcpServer({
   name: 'spike',
   version: '0.0.1',
-  /* CLAVE DEL SPIKE. Sin esto, al reanudar el modelo dice literalmente que la
-     herramienta "no está disponible": por defecto las tools de un servidor SDK
-     quedan detrás de la búsqueda de herramientas (`defer_loading`), y en el
-     turno de reanudación no llegan a cargarse en el prompt. La llamada
-     pendiente existe en el transcript, pero el modelo no puede volver a
-     emitirla porque no ve la herramienta.
+  /* THE KEY TO THE SPIKE. Without this, on resume the model literally says the
+     tool "is not available": by default an SDK server's tools sit behind tool
+     search (`defer_loading`), and on the resume turn they never get loaded into
+     the prompt. The pending call exists in the transcript, but the model can't
+     emit it again because it can't see the tool.
 
-     Con alwaysLoad la tool va SIEMPRE en el prompt. Es exactamente la
-     condición que la doc esconde bajo "if the deferred tool is no longer
+     With alwaysLoad the tool is ALWAYS in the prompt. That's exactly the
+     condition the docs hide under "if the deferred tool is no longer
      available when you resume". */
   alwaysLoad: true,
   tools: [
     tool(
       TOOL_NAME,
-      'Registra un gasto en el libro. Úsala cuando te pidan registrar un gasto.',
+      'Logs an expense in the ledger. Use it when asked to log an expense.',
       { concepto: z.string(), importe: z.number() },
       async ({ concepto, importe }) => {
         fs.appendFileSync(EFECTO,
           `${new Date().toISOString()} pid=${process.pid} ${concepto} ${importe}\n`);
-        return { content: [{ type: 'text', text: `registrado: ${concepto} ${importe}` }] };
+        return { content: [{ type: 'text', text: `logged: ${concepto} ${importe}` }] };
       }
     )
   ]
 });
 
-/* El hook. `decision` la pone cada proceso: A difiere, B permite.
-   Los dos usan EXACTAMENTE el mismo código para que la única variable del
-   experimento sea la decisión. */
+/* The hook. Each process sets `decision`: A defers, B allows.
+   Both use EXACTLY the same code so the experiment's only variable is the
+   decision. */
 export function hooks(decision, motivo) {
   return {
     PreToolUse: [{
@@ -79,10 +78,10 @@ export function hooks(decision, motivo) {
 export const OPCIONES_BASE = {
   model: MODELO,
   mcpServers: { spike: servidor },
-  /* Lista blanca tool por tool, nunca comodín: es la regla del informe A. */
+  /* Allowlist tool by tool, never a wildcard: that's the rule from report A. */
   allowedTools: [TOOL_FQN],
-  /* Sin herramientas de disco ni de red: el spike no las necesita y cada una
-     es superficie de más. */
+  /* No disk or network tools: the spike doesn't need them and each one is
+     extra surface. */
   settingSources: [],
   maxTurns: 4
 };

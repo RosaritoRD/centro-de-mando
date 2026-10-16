@@ -1,29 +1,29 @@
-/* tu empresa — APM · autenticación.
+/* Acme — APM · authentication.
 
-   APM no tiene login propio. Reusa la cookie de sesión `__session` que emite
-   tu web principal con el Admin SDK: va con Domain=.tu-dominio.com, así que el
-   navegador la manda también a apm.tu-dominio.com. Cero pantallas nuevas, cero
-   segundo sistema de auth.
+   APM has no login of its own. It reuses the `__session` cookie that
+   your main website issues with the Admin SDK: it's set with Domain=.your-domain.com,
+   so the browser also sends it to apm.your-domain.com. Zero new screens, zero
+   second auth system.
 
-   ESTO ATA APM AL DOMINIO: el Domain de la cookie lo deriva tu web principal de su
-   APP_BASE_URL. Mientras eso sea tu-dominio.com, APM sólo puede vivir en
-   *.tu-dominio.com. Servirlo desde otro dominio no da un error visible — da
-   401 en bucle, porque el navegador simplemente no manda la cookie. Pasó el
-   14/08 con la migración de tu-dominio.com.
+   THIS TIES APM TO THE DOMAIN: your main website derives the cookie's Domain from its
+   APP_BASE_URL. As long as that's your-domain.com, APM can only live on
+   *.your-domain.com. Serving it from another domain gives no visible error — it
+   gives a 401 loop, because the browser simply doesn't send the cookie. It
+   happened on 14/08 with the your-domain.com migration.
 
-   Dos credenciales aceptadas, igual que en tu web principal: el Bearer con el ID
-   token o la cookie. En ambos casos se comprueba SIEMPRE la revocación — una
-   cuenta desactivada no puede seguir entrando con un token que aún no expiró.
+   Two credentials accepted, same as your main website: a Bearer ID token or the
+   cookie. Revocation is ALWAYS checked in both cases — a disabled account
+   can't keep getting in with a token that hasn't expired yet.
 
-   AUTORIZACIÓN: APM es de UNA persona. No basta con tener una cuenta válida
-   de Firebase; el UID tiene que estar en APM_ALLOWED_UIDS. Que un empleado de
-   un DSP con cuenta en tu-dominio.com pudiera entrar al centro de mando sería el
-   fallo más caro posible, y "no le voy a pasar el enlace" no es un control. */
+   AUTHORIZATION: APM belongs to ONE person. A valid Firebase account isn't
+   enough; the UID must be in APM_ALLOWED_UIDS. A DSP employee with a
+   your-domain.com account getting into the command center would be the most
+   expensive failure possible, and "I won't send them the link" isn't a control. */
 
 const COOKIE_NAME = '__session';
 
-/* Lee una cookie del header sin cookie-parser. Mismo enfoque que tu web principal:
-   una dependencia menos con acceso a las cabeceras. */
+/* Reads a cookie from the header without cookie-parser. Same approach as
+   your main website: one less dependency with access to the headers. */
 export function sessionCookie(req) {
   const header = req.headers.cookie || '';
   for (const part of header.split(';')) {
@@ -36,9 +36,9 @@ export function sessionCookie(req) {
   return '';
 }
 
-/* La allowlist se lee una vez al arrancar: cambiarla es editar el .env y
-   reiniciar, que para un producto de un solo usuario es exactamente el nivel
-   de ceremonia correcto. */
+/* The allowlist is read once at startup: changing it means editing the .env
+   and restarting, which for a single-user product is exactly the right amount
+   of ceremony. */
 export function parseAllowlist(raw) {
   return new Set(
     String(raw || '')
@@ -48,23 +48,24 @@ export function parseAllowlist(raw) {
   );
 }
 
-/* Núcleo inyectable: decide si un usuario entra, sin tocar red ni Firebase.
-   Se prueba entero con `node --test`.
+/* Injectable core: decides whether a user gets in, without touching the
+   network or Firebase. Fully tested with `node --test`.
 
-   Devuelve el MOTIVO y no un booleano porque 401 y 403 son cosas distintas
-   para quien depura: 401 es "no sé quién eres" (la cookie caducó, hay que
-   volver a signin) y 403 es "sé quién eres y no eres tú". */
+   It returns the REASON and not a boolean because 401 and 403 mean different
+   things to whoever is debugging: 401 is "I don't know who you are" (the
+   cookie expired, go back to sign-in) and 403 is "I know who you are and
+   you're not the one". */
 export function decidirAcceso(user, allowlist) {
   if (!user || !user.uid) return { ok: false, status: 401, code: 'no_session' };
-  /* Allowlist vacía = nadie entra. El fallo seguro es cerrar, no abrir: una
-     variable de entorno que no se cargó no puede convertir el centro de mando
-     en una página pública. */
+  /* Empty allowlist = nobody gets in. The safe failure is to close, not open:
+     an environment variable that didn't load can't turn the command center
+     into a public page. */
   if (allowlist.size === 0) return { ok: false, status: 403, code: 'allowlist_empty' };
   if (!allowlist.has(user.uid)) return { ok: false, status: 403, code: 'not_allowed' };
   return { ok: true, uid: user.uid, email: user.email || null };
 }
 
-/* Verifica cualquiera de las dos credenciales contra Firebase. */
+/* Verifies either credential against Firebase. */
 export async function verificarCredencial(req, fbAuth) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
@@ -75,21 +76,21 @@ export async function verificarCredencial(req, fbAuth) {
   return fbAuth.verifySessionCookie(cookie, true);
 }
 
-/* El middleware. `fbAuth` entra por parámetro para poder montar la API sin
-   Firebase en las pruebas. */
+/* The middleware. `fbAuth` comes in as a parameter so the API can be mounted
+   without Firebase in tests. */
 export function requireUser({ fbAuth, allowlist }) {
   return async (req, res, next) => {
     let user = null;
     try {
       user = await verificarCredencial(req, fbAuth);
     } catch (e) {
-      /* Token caducado, revocado o mal firmado. No es un error del servidor:
-         es que hay que volver a identificarse. */
+      /* Expired, revoked or badly signed token. Not a server error: you just
+         have to identify yourself again. */
       return res.status(401).json({ error: { code: 'invalid_session', message: e.code || 'invalid' } });
     }
     const veredicto = decidirAcceso(user, allowlist);
     if (!veredicto.ok) {
-      return res.status(veredicto.status).json({ error: { code: veredicto.code, message: 'no autorizado' } });
+      return res.status(veredicto.status).json({ error: { code: veredicto.code, message: 'not authorized' } });
     }
     req.user = { uid: veredicto.uid, email: veredicto.email };
     next();

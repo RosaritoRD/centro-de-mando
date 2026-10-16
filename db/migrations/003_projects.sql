@@ -1,19 +1,19 @@
--- tu empresa — APM
--- Migración 003: registro de proyectos y health checks (Fase 5).
+-- Acme — APM
+-- Migration 003: project registry and health checks (Phase 5).
 --
--- Se aplica con:
+-- Apply with:
 --   docker exec -i n8n_postgres psql -U n8n -d apm < db/migrations/003_projects.sql
 --
--- POR QUÉ
--- el dueño opera varios sitios (tu-dominio.com, fleet, los subdominios de tenant) y
--- hoy se entera de que uno está caído porque lo abre. El vigilante del host
--- (memoria monitoreo) avisa por SMTP de contenedores, pero no de si una
--- URL pública responde. Esto es lo segundo.
+-- WHY
+-- the owner runs several sites (your-domain.com, fleet, the tenant subdomains) and
+-- today finds out one is down by opening it. The host watchdog alerts
+-- over SMTP about containers, but not about whether a public URL
+-- responds. This is the latter.
 
--- ── Proyectos ──────────────────────────────────────────────────────
--- `url` es lo que se comprueba; `kind` solo agrupa en la UI.
--- Soft delete con archived_at: en APM se archiva, no se borra (y a apm_app no
--- se le concede DELETE de todas formas).
+-- ── Projects ───────────────────────────────────────────────────────
+-- `url` is what gets checked; `kind` only groups in the UI.
+-- Soft delete with archived_at: in APM we archive, we don't delete (and apm_app
+-- isn't granted DELETE anyway).
 CREATE TABLE IF NOT EXISTS project (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name        TEXT NOT NULL,
@@ -25,10 +25,10 @@ CREATE TABLE IF NOT EXISTS project (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS project_url_idx ON project (url) WHERE archived_at IS NULL;
 
--- ── Resultado de cada comprobación — APPEND ONLY ───────────────────
--- Una fila por sondeo. No se actualiza la última: el historial ES el dato,
--- porque "lleva caído desde las 3" solo se puede contestar con historial.
--- ms es INTEGER: nadie necesita microsegundos para saber si un sitio va lento.
+-- ── Result of each check — APPEND ONLY ─────────────────────────────
+-- One row per probe. The latest isn't updated: the history IS the data,
+-- because "it's been down since 3" can only be answered with history.
+-- ms is INTEGER: nobody needs microseconds to know a site is slow.
 CREATE TABLE IF NOT EXISTS project_check (
   id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   project_id UUID NOT NULL,
@@ -38,20 +38,20 @@ CREATE TABLE IF NOT EXISTS project_check (
   error      TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- Índice descendente: la consulta caliente es "el último de cada proyecto".
+-- Descending index: the hot query is "the latest one per project".
 CREATE INDEX IF NOT EXISTS project_check_last_idx
   ON project_check (project_id, created_at DESC);
 
--- Siembra con lo que ya existe. ON CONFLICT DO NOTHING para que reaplicar la
--- migración no duplique ni pise cambios hechos desde el panel.
+-- Seeded with what already exists. ON CONFLICT DO NOTHING so re-applying the
+-- migration neither duplicates nor overwrites changes made from the dashboard.
 INSERT INTO project (name, url, kind, area) VALUES
-  ('Web pública',   'https://tu-dominio.com/',            'web',   'marketing'),
-  ('Panel tu empresa',  'https://app.tu-dominio.com/',        'panel', 'delivery'),
-  ('APM',           'https://apm.tu-dominio.com/api/health','api', 'infra'),
-  ('n8n',           'https://n8n.tu-dominio.com/',        'panel', 'infra')
+  ('Public website','https://your-domain.com/',            'web',   'marketing'),
+  ('Panel Acme',  'https://app.your-domain.com/',        'panel', 'delivery'),
+  ('APM',           'https://apm.your-domain.com/api/health','api', 'infra'),
+  ('n8n',           'https://n8n.your-domain.com/',        'panel', 'infra')
 ON CONFLICT DO NOTHING;
 
--- ── Permisos ───────────────────────────────────────────────────────
+-- ── Permissions ────────────────────────────────────────────────────
 GRANT USAGE ON SCHEMA public TO apm_app;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO apm_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO apm_app;

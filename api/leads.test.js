@@ -1,8 +1,8 @@
-/* Rutas de prospección con repo y fuentes falsos: validación, límites del
-   scraper, reglas legales (no_llamar) y que un fallo de la fuente quede
-   registrado como fallo.
+/* Prospecting routes with a fake repo and sources: validation, scraper
+   limits, legal rules (no_llamar) and that a source failure gets recorded as a
+   failure.
 
-   Correr:  node --test leads.test.js  */
+   Run:  node --test leads.test.js  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,7 +27,7 @@ function repoFalso(sobre = {}) {
     terminarRun: async (id, r) => { runs.set(id, { ...runs.get(id), ...r }); },
     guardarLeads: async ({ leads }) => ({ inserted: leads.length, merged: 0, suppressed: 0 }),
     siguienteLead: async () => ({ lead: { id: ID }, reason: null }),
-    obtenerLead: async (_t, id) => (id === ID ? { id, business_name: 'Prueba Co', phone_e164: '+17185550172', sources: ['nyc_open_data'], history: [] } : null),
+    obtenerLead: async (_t, id) => (id === ID ? { id, business_name: 'Demo Co', phone_e164: '+17185550172', sources: ['nyc_open_data'], history: [] } : null),
     guion: async () => ({ title: 'Guion', body: 'Hola' }),
     resumenCola: async () => ({ due: 0, new: 5, scheduled: 1 }),
     registrarLlamada: async (a) => { llamadas.push(a); return { callId: 'c1', leadStatus: a.r.leadStatus }; },
@@ -60,7 +60,7 @@ async function servidor(repo, fuentes = {}, autenticado = true) {
 
 const esperaFondo = () => new Promise((r) => setTimeout(r, 20));
 
-test('sin sesión → 401 en todas las rutas', async (t) => {
+test('no session → 401 on every route', async (t) => {
   const s = await servidor(repoFalso(), {}, false);
   t.after(s.cerrar);
   for (const ruta of ['/api/leads', '/api/leads/next?niche=x_y', '/api/scoreboard', '/api/scripts']) {
@@ -68,7 +68,7 @@ test('sin sesión → 401 en todas las rutas', async (t) => {
   }
 });
 
-test('importar NYC: valida, responde 202 y registra el resultado en segundo plano', async (t) => {
+test('NYC import: validates, answers 202 and records the result in the background', async (t) => {
   const repo = repoFalso();
   const fuentes = { nyc: async (p) => ({ found: 2, invalid: 1, leads: [{ phoneE164: '+13470000001', businessName: 'A', category: p.category }] }) };
   const s = await servidor(repo, fuentes);
@@ -83,9 +83,9 @@ test('importar NYC: valida, responde 202 y registra el resultado en segundo plan
     { status: 'done', found: 2, invalid: 1, inserted: 1 });
 });
 
-test('fuente caída → run failed con el motivo, nunca "done" vacío', async (t) => {
+test('source down → run failed with the reason, never an empty "done"', async (t) => {
   const repo = repoFalso();
-  const s = await servidor(repo, { nyc: async () => { throw new Error('NYC Open Data respondió 503'); } });
+  const s = await servidor(repo, { nyc: async () => { throw new Error('NYC Open Data answered 503'); } });
   t.after(s.cerrar);
   await s.pedir('/api/leads/import', { method: 'POST', body: { source: 'nyc_open_data', niche: 'locksmith', params: { category: 'Locksmith' } } });
   await esperaFondo();
@@ -93,7 +93,7 @@ test('fuente caída → run failed con el motivo, nunca "done" vacío', async (t
   assert.match(repo.runs.get('run-1').error, /503/);
 });
 
-test('Google Maps: 409 si hay uno corriendo, 429 si ya van 3 hoy, 400 con búsqueda vacía', async (t) => {
+test('Google Maps: 409 if one is running, 429 after 3 today, 400 on an empty search', async (t) => {
   const s1 = await servidor(repoFalso({ contarRuns: async () => ({ corriendo: 1, hoy: 1 }) }), { gmaps: async () => ({ leads: [] }) });
   t.after(s1.cerrar);
   const body = { source: 'google_maps', niche: 'locksmith', params: { query: 'locksmith', location: 'Bronx, NY' } };
@@ -104,7 +104,7 @@ test('Google Maps: 409 si hay uno corriendo, 429 si ya van 3 hoy, 400 con búsqu
   assert.equal((await s2.pedir('/api/leads/import', { method: 'POST', body: { ...body, params: { query: '' } } })).status, 400);
 });
 
-test('next: lead + guion + cola, con teléfono para mostrar', async (t) => {
+test('next: lead + script + queue, with a display phone', async (t) => {
   const s = await servidor(repoFalso());
   t.after(s.cerrar);
   const r = await s.pedir('/api/leads/next?niche=home_improvement_contractor');
@@ -115,11 +115,11 @@ test('next: lead + guion + cola, con teléfono para mostrar', async (t) => {
   assert.equal((await s.pedir('/api/leads/next?niche=..%2F')).status, 400);
 });
 
-test('registrar llamada: no_llamar ignora "volver a llamar" del cliente; validaciones', async (t) => {
+test('log a call: no_llamar ignores the client\'s "call back"; validations', async (t) => {
   const repo = repoFalso();
   const s = await servidor(repo);
   t.after(s.cerrar);
-  const r = await s.pedir(`/api/leads/${ID}/calls`, { method: 'POST', body: { outcome: 'no_llamar', callAgain: true, nextCallAt: '2026-10-01T15:00:00Z', notes: 'pidió que no' } });
+  const r = await s.pedir(`/api/leads/${ID}/calls`, { method: 'POST', body: { outcome: 'no_llamar', callAgain: true, nextCallAt: '2026-10-01T15:00:00Z', notes: 'asked us not to' } });
   assert.equal(r.status, 201);
   assert.equal(repo.llamadas[0].r.callAgain, false);
   assert.equal(repo.llamadas[0].r.suppress, 'no_llamar');
@@ -128,7 +128,7 @@ test('registrar llamada: no_llamar ignora "volver a llamar" del cliente; validac
   assert.equal((await s.pedir('/api/leads/no-es-uuid/calls', { method: 'POST', body: { outcome: 'buzon' } })).status, 400);
 });
 
-test('CSV: cabecera, BOM y fórmulas neutralizadas', async (t) => {
+test('CSV: header, BOM and neutralized formulas', async (t) => {
   const s = await servidor(repoFalso());
   t.after(s.cerrar);
   const r = await s.pedir('/api/leads?format=csv');
@@ -137,7 +137,7 @@ test('CSV: cabecera, BOM y fórmulas neutralizadas', async (t) => {
   assert.match(r.texto, /"'=HYPERLINK\(""x""\)"/);
 });
 
-test('scoreboard de la semana actual y la anterior', async (t) => {
+test('this week\'s and last week\'s scoreboard', async (t) => {
   const s = await servidor(repoFalso());
   t.after(s.cerrar);
   const r = await s.pedir('/api/scoreboard');
@@ -148,7 +148,7 @@ test('scoreboard de la semana actual y la anterior', async (t) => {
   assert.equal((await s.pedir('/api/scoreboard?week=hola')).status, 400);
 });
 
-test('guardar guion valida longitud', async (t) => {
+test('saving a script validates its length', async (t) => {
   const s = await servidor(repoFalso());
   t.after(s.cerrar);
   assert.equal((await s.pedir('/api/scripts/locksmith', { method: 'PUT', body: { title: 'x', body: '' } })).status, 400);

@@ -1,11 +1,11 @@
-# tu empresa — APM
+# Acme — APM
 #
-# Dos contenedores nuevos y nada más: ni Postgres, ni Redis, ni proxy. La BD
-# `apm` vive en el n8n_postgres que ya existe y el TLS lo termina el Nginx
-# Proxy Manager que ya está montado (docs/ARCHITECTURE.md §1).
+# Two new containers and nothing else: no Postgres, no Redis, no proxy. The
+# `apm` DB lives in the existing n8n_postgres, and TLS is terminated by the
+# Nginx Proxy Manager that's already set up (docs/ARCHITECTURE.md §1).
 
 services:
-  # nginx con los estáticos que compiló Vite. En producción no corre Node.
+  # nginx with the static files Vite built. Node does not run in production.
   web:
     build: ./web
     container_name: apm-web
@@ -22,21 +22,21 @@ services:
     env_file:
       - ./.env
     networks:
-      # Para que apm-web (y NPM, si algún día hace falta) lo alcance.
+      # So apm-web (and NPM, if ever needed) can reach it.
       - proxy
-      # Para hablar con la BD apm dentro de n8n_postgres, y con n8n, sin
-      # publicar un solo puerto al host.
+      # To talk to the apm DB inside n8n_postgres, and to n8n, without
+      # publishing a single port on the host.
       - n8n_internal
-      # Para llamar al scraper (http://gmaps-scraper:8080).
+      # To call the scraper (http://gmaps-scraper:8080).
       - scraper
 
-  # Scraper de Google Maps (gosom/google-maps-scraper) en modo web/REST.
-  # ⚠ Decisión de el dueño 24/09/2026: uso INTERNO asumiendo los ToS de Google.
-  # Sin puertos publicados: solo lo alcanza apm-api por la red `scraper`.
-  # -c 1 = una sola búsqueda a la vez (búsqueda "suave"); los topes diarios
-  # los aplica la API (api/sources/google-maps.js). En reposo usa ~50 MB.
+  # Google Maps scraper (gosom/google-maps-scraper) in web/REST mode.
+  # ⚠ the owner's decision 24/09/2026: INTERNAL use, accepting Google's ToS risk.
+  # No published ports: only apm-api reaches it, over the `scraper` network.
+  # -c 1 = a single search at a time ("gentle" searching); the daily caps are
+  # enforced by the API (api/sources/google-maps.js). Uses ~50 MB at rest.
   gmaps-scraper:
-    image: gosom/google-maps-scraper@sha256:e205c02913c5a69c16fc2094b8e5b194a2f655166d2c1126d50548d216e6b1b2  # fijada el 24/09/2026
+    image: gosom/google-maps-scraper@sha256:e205c02913c5a69c16fc2094b8e5b194a2f655166d2c1126d50548d216e6b1b2  # pinned on 24/09/2026
     container_name: apm-gmaps-scraper
     restart: unless-stopped
     command: ["-data-folder", "/gmapsdata", "-c", "1"]
@@ -48,8 +48,8 @@ services:
       - scraper
 
 networks:
-  # Red propia del scraper: necesita salida a internet (Google), pero no ver
-  # la BD ni el proxy.
+  # The scraper's own network: it needs internet access (Google), but must not
+  # see the DB or the proxy.
   scraper:
     name: apm_scraper
   n8n_internal:

@@ -1,22 +1,22 @@
-/* tu empresa — APM · acceso a Postgres.
+/* Acme — APM · Postgres access.
 
-   La BD `apm` vive en el contenedor n8n_postgres, el mismo que ya sirve a
-   tu web y a n8n. No se levanta un Postgres nuevo a propósito: ahorra
-   ~150-250 MB de RAM en una VPS que ya toca swap, y hereda los backups
-   cifrados a R2 que ya están en cron y verificados.
+   The `apm` DB lives in the n8n_postgres container, the same one that already
+   serves your website and n8n. No new Postgres is started on purpose: it saves
+   ~150-250 MB of RAM on a VPS that already touches swap, and it inherits the
+   encrypted R2 backups that are already in cron and verified.
 
-   Las tablas las crea el rol dueño (n8n) y esta aplicación entra como
-   apm_app, que tiene SELECT/INSERT/UPDATE y NO tiene DELETE ni puede hacer
-   ALTER. Es deliberado: en APM se archiva, no se borra, y una migración no
-   se aplica sin querer desde el código. */
+   The tables are created by the owner role (n8n) and this app connects as
+   apm_app, which has SELECT/INSERT/UPDATE and NO DELETE, and can't ALTER.
+   That's deliberate: in APM we archive, we don't delete, and a migration can't
+   be applied by accident from the code. */
 
 import pg from 'pg';
 
 const { Pool } = pg;
 
-/* max 5 y no el 10 por defecto: dos ejecuciones concurrentes como mucho
-   (MAX_CONCURRENT_RUNS) no necesitan más, y cada conexión ociosa es memoria
-   en un Postgres que además sirve a tu web y a n8n. */
+/* max 5, not the default 10: at most two concurrent runs
+   (MAX_CONCURRENT_RUNS) don't need more, and every idle connection is memory
+   in a Postgres that also serves your website and n8n. */
 export const db = new Pool({
   connectionString: process.env.APM_DB_URL,
   max: 5,
@@ -26,8 +26,8 @@ export const db = new Pool({
 
 db.on('error', (e) => console.error('pg pool:', e.message));
 
-/* Para /api/health. Devuelve el motivo del fallo en vez de lanzar: una BD
-   caída tiene que salir en la respuesta de salud, no tumbar el proceso. */
+/* For /api/health. Returns the failure reason instead of throwing: a DB that's
+   down has to show up in the health response, not take down the process. */
 export async function dbOk() {
   try {
     await db.query('SELECT 1');

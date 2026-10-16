@@ -1,42 +1,44 @@
-# Categoría F — Automatizaciones y puente con n8n
+# Category F — Automations and the n8n bridge
 
-**Investigado:** 2026-08-02
-**Contexto:** APM correrá en `apm.tu-dominio.com` (Claude Agent SDK), detrás de Nginx Proxy Manager (NPM),
-con n8n auto-hospedado en Docker (6 workflows en producción) y Postgres propio compartido con n8n.
+**Researched:** 2026-08-02
+**Context:** APM will run at `apm.your-domain.com` (Claude Agent SDK), behind Nginx Proxy Manager (NPM),
+with self-hosted n8n in Docker (6 workflows in production) and its own Postgres shared with n8n.
 
-Todo lo marcado ✅ está verificado contra fuente primaria (docs.n8n.io, API de GitHub, repos).
-Lo marcado ⚠️ NO VERIFICADO no debe darse por cierto sin comprobarlo en la VPS.
+Everything marked ✅ is verified against a primary source (docs.n8n.io, the GitHub API, repos).
+Anything marked ⚠️ NOT VERIFIED must not be taken as fact without checking it on the VPS.
 
 ---
 
-## 1. Resumen ejecutivo (las 3 decisiones)
+## 1. Executive summary (the 3 decisions)
 
-| Decisión | Recomendación | Por qué en una línea |
+| Decision | Recommendation | Why, in one line |
 |---|---|---|
-| ¿Cómo dispara APM a n8n? | **Webhooks de n8n** (disparo) + **REST API** (lectura/monitoreo) | La REST API **no tiene endpoint para ejecutar workflows** — el webhook es la única vía real de disparo. |
-| ¿MCP Server Trigger? | **No para el puente principal.** Opcional en fase 2 | Añade SSE, buffering, sesiones largas y un fallo más detrás de NPM, a cambio de nada que webhook+API no den. |
-| ¿Scheduler? | **pg-boss** dentro de APM | Postgres que ya tienes, sin Redis nuevo, cron nativo, mantenimiento excelente (release 2026-08-01). |
+| How does APM trigger n8n? | **n8n webhooks** (trigger) + **REST API** (reading/monitoring) | The REST API **has no endpoint to run workflows** — the webhook is the only real way to trigger. |
+| MCP Server Trigger? | **Not for the main bridge.** Optional in phase 2 | It adds SSE, buffering, long sessions and one more failure point behind NPM, in exchange for nothing webhook+API don't give. |
+| Scheduler? | **pg-boss** inside APM | The Postgres you already have, no new Redis, native cron, excellent maintenance (release 2026-08-01). |
+
+(Note: in the end APM only uses the REST API, read-only, to monitor — see `api/n8n.js`.)
 
 ---
 
-## 2. Tabla comparativa de opciones de integración
+## 2. Comparison table of integration options
 
-| Opción | Dirección | Transporte | Auth | ¿Dispara? | ¿Monitorea? | Riesgo con NPM | Veredicto |
+| Option | Direction | Transport | Auth | Triggers? | Monitors? | Risk with NPM | Verdict |
 |---|---|---|---|---|---|---|---|
-| **Webhook de n8n** | APM → n8n | HTTP POST normal | Basic / Header / JWT ✅ | ✅ Sí | Parcial (respuesta síncrona) | **Ninguno** | ✅ **Elegido para disparar** |
-| **REST API pública** (`/api/v1`) | APM → n8n | HTTP normal | `X-N8N-API-KEY` ✅ | ❌ **No existe endpoint run/execute** | ✅ Completo (executions) | **Ninguno** | ✅ **Elegido para monitorear** |
-| **MCP Server Trigger** | APM → n8n | SSE / Streamable HTTP | Bearer / Header ✅ | ✅ Sí (como "tool") | ❌ No da historial | **ALTO** (buffering) | ⚠️ Fase 2, opcional |
-| **MCP Client Tool** | n8n → APM | SSE | Bearer/Header/OAuth2 ✅ | Dirección **contraria** | — | Medio | ❌ No sirve para este caso |
-| **czlonkowski/n8n-mcp** | Claude → n8n (autoría) | stdio / HTTP | `N8N_API_KEY` | Sí (crea/edita workflows) | Sí | Bajo | ⚠️ Solo para **construir** workflows, nunca apuntado a producción |
-| **Schedule Trigger de n8n** | n8n → APM | HTTP normal | La del webhook de APM | ✅ | ❌ | Ninguno | ⚠️ Solo tareas ya "de n8n" |
+| **n8n webhook** | APM → n8n | Plain HTTP POST | Basic / Header / JWT ✅ | ✅ Yes | Partial (synchronous response) | **None** | ✅ **Chosen for triggering** |
+| **Public REST API** (`/api/v1`) | APM → n8n | Plain HTTP | `X-N8N-API-KEY` ✅ | ❌ **No run/execute endpoint exists** | ✅ Complete (executions) | **None** | ✅ **Chosen for monitoring** |
+| **MCP Server Trigger** | APM → n8n | SSE / Streamable HTTP | Bearer / Header ✅ | ✅ Yes (as a "tool") | ❌ No history | **HIGH** (buffering) | ⚠️ Phase 2, optional |
+| **MCP Client Tool** | n8n → APM | SSE | Bearer/Header/OAuth2 ✅ | The **opposite** direction | — | Medium | ❌ Not useful for this case |
+| **czlonkowski/n8n-mcp** | Claude → n8n (authoring) | stdio / HTTP | `N8N_API_KEY` | Yes (creates/edits workflows) | Yes | Low | ⚠️ Only for **building** workflows, never pointed at production |
+| **n8n Schedule Trigger** | n8n → APM | Plain HTTP | APM's webhook auth | ✅ | ❌ | None | ⚠️ Only for tasks that already "belong" to n8n |
 
 ---
 
-## 3. Hallazgo crítico: la REST API de n8n NO ejecuta workflows
+## 3. Critical finding: the n8n REST API does NOT run workflows
 
-✅ **VERIFICADO** — `https://docs.n8n.io/connect/n8n-api/workflow`
+✅ **VERIFIED** — `https://docs.n8n.io/connect/n8n-api/workflow`
 
-Endpoints reales del recurso Workflow:
+The real endpoints of the Workflow resource:
 
 ```
 GET    /api/v1/workflows
@@ -46,21 +48,21 @@ PUT    /api/v1/workflows/{id}
 DELETE /api/v1/workflows/{id}
 GET    /api/v1/workflows/{id}/history
 GET    /api/v1/workflows/{id}/{versionId}
-POST   /api/v1/workflows/{id}/activate     # DEPRECADO
-POST   /api/v1/workflows/{id}/deactivate   # DEPRECADO
-POST   /api/v1/workflows/{id}/publish      # actual
-POST   /api/v1/workflows/{id}/unpublish    # actual
+POST   /api/v1/workflows/{id}/activate     # DEPRECATED
+POST   /api/v1/workflows/{id}/deactivate   # DEPRECATED
+POST   /api/v1/workflows/{id}/publish      # current
+POST   /api/v1/workflows/{id}/unpublish    # current
 ```
 
-**No existe** `POST /workflows/{id}/run` ni `/execute`. Esto es lo que fuerza la arquitectura:
-**para disparar hay que usar un webhook.** No hay alternativa vía API.
+There is **no** `POST /workflows/{id}/run` or `/execute`. That's what forces the architecture:
+**to trigger, you have to use a webhook.** There's no API alternative.
 
-⚠️ Ojo con `activate`/`deactivate`: están **deprecados** a favor de `publish`/`unpublish`.
-Si copias código de un tutorial de 2025 usará los viejos. Verifica cuál acepta tu versión de n8n antes de cablearlo.
+⚠️ Watch `activate`/`deactivate`: they're **deprecated** in favor of `publish`/`unpublish`.
+If you copy code from a 2025 tutorial it'll use the old ones. Check which your n8n version accepts before wiring it.
 
-### Recurso Execution (esto SÍ nos da el monitoreo completo)
+### The Execution resource (this DOES give us complete monitoring)
 
-✅ **VERIFICADO** — `https://docs.n8n.io/connect/n8n-api/execution`
+✅ **VERIFIED** — `https://docs.n8n.io/connect/n8n-api/execution`
 
 ```
 GET    /api/v1/executions
@@ -73,122 +75,122 @@ GET    /api/v1/executions/{id}/tags
 PUT    /api/v1/executions/{id}/tags
 ```
 
-Query params de `GET /api/v1/executions` (todos verificados):
+Query params for `GET /api/v1/executions` (all verified):
 
-| Param | Tipo | Nota |
+| Param | Type | Note |
 |---|---|---|
-| `includeData` | boolean | Incluye los datos detallados de la ejecución |
-| `redactExecutionData` | boolean | Redacta la salida |
+| `includeData` | boolean | Includes the execution's detailed data |
+| `redactExecutionData` | boolean | Redacts the output |
 | `status` | string | `canceled`, `crashed`, `error`, `new`, `running`, `success`, `unknown`, `waiting` |
-| `workflowId` | string | Filtra por workflow |
-| `projectId` | string | Filtra por proyecto |
-| `limit` | number | Default **100**, máximo **250** |
-| `cursor` | string | Paginación: usa el `nextCursor` de la respuesta anterior |
-| `ignoreDataSizeLimit` | boolean | Devuelve datos que exceden el límite de tamaño |
+| `workflowId` | string | Filter by workflow |
+| `projectId` | string | Filter by project |
+| `limit` | number | Default **100**, max **250** |
+| `cursor` | string | Pagination: use the previous response's `nextCursor` |
+| `ignoreDataSizeLimit` | boolean | Returns data exceeding the size limit |
 
-`POST /executions/{id}/retry` es una joya para APM: si un scrape diario falla, APM puede reintentarlo
-sin reconstruir el payload.
+`POST /executions/{id}/retry` is a gem for APM: if a daily scrape fails, APM can retry it
+without rebuilding the payload.
 
-### Autenticación
+### Authentication
 
-✅ **VERIFICADO** — `https://docs.n8n.io/connect/n8n-api/authentication`
+✅ **VERIFIED** — `https://docs.n8n.io/connect/n8n-api/authentication`
 
-- Header: **`X-N8N-API-KEY`** (textual: *"Send the API key in your API call as a header named `X-N8N-API-KEY`"*)
-- Base URL self-hosted: **`https://<your-instance-url>/api/v1`**
-- Se crea en **Settings → n8n API → Create an API key**, con **etiqueta y fecha de expiración**
-- ⚠️ **Los scopes son solo Enterprise.** En un self-hosted normal **la API key tiene acceso total a la cuenta.**
-  Trátala como credencial de root: va en el `.env` de APM, nunca en git, nunca en el navegador.
-- ⚠️ **Pon recordatorio de la expiración.** Elegiste una fecha al crearla; el día que expire, APM deja de
-  ver ejecuciones en silencio. Es exactamente el tipo de fallo que cuesta 3 horas encontrar.
+- Header: **`X-N8N-API-KEY`** (verbatim: *"Send the API key in your API call as a header named `X-N8N-API-KEY`"*)
+- Self-hosted base URL: **`https://<your-instance-url>/api/v1`**
+- Created under **Settings → n8n API → Create an API key**, with a **label and an expiration date**
+- ⚠️ **Scopes are Enterprise-only.** On a normal self-hosted instance **the API key has full account access.**
+  Treat it like a root credential: it goes in APM's `.env`, never in git, never in the browser.
+- ⚠️ **Set a reminder for the expiration.** You picked a date when creating it; the day it expires, APM silently
+  stops seeing executions. Exactly the kind of failure that takes 3 hours to find.
 
-⚠️ **NO VERIFICADO / a comprobar en tu VPS:** la doc dice *"The n8n API isn't available during the free trial"*.
-Eso aplica a n8n Cloud. En self-hosted (tu caso) la API pública está disponible, pero **confírmalo**
-entrando a Settings → n8n API antes de diseñar sobre ella.
+⚠️ **NOT VERIFIED / to check on your VPS:** the docs say *"The n8n API isn't available during the free trial"*.
+That applies to n8n Cloud. On self-hosted (your case) the public API is available, but **confirm it**
+by going to Settings → n8n API before designing on top of it.
 
 ---
 
-## 4. Webhooks de n8n como mecanismo de disparo
+## 4. n8n webhooks as the trigger mechanism
 
-✅ **VERIFICADO** — nodo Webhook, docs.n8n.io
+✅ **VERIFIED** — Webhook node, docs.n8n.io
 
-Formato de URL:
-
-```
-Producción:  https://<tu-n8n>/webhook/<path>
-Test:        https://<tu-n8n>/webhook-test/<path>
-```
-
-- La URL de producción se registra **al publicar el workflow**; la de test solo dura **120 segundos**
-  tras pulsar "Listen for Test Event".
-- La URL de producción se construye con la variable de entorno `WEBHOOK_URL`; la de test con
-  `N8N_EDITOR_BASE_URL`. Si tu n8n está detrás de NPM y las URLs salen con `localhost:5678`,
-  es porque falta `WEBHOOK_URL` en el docker-compose.
-
-**Autenticación del nodo Webhook** (✅ verificado): `Basic auth`, `Header auth`, `JWT auth`, `None`.
-→ Usa **Header auth** con un secreto largo por workflow. Nunca dejes `None` en un webhook accesible desde internet.
-
-**Modos de respuesta** (✅ verificado): `Immediately` (devuelve "Workflow got started"),
-`When Last Node Finishes`, `Using 'Respond to Webhook' Node`, y **`Streaming response`**.
-
-Patrón recomendado para APM:
+URL format:
 
 ```
-APM  --POST--> https://n8n.tu-dominio.com/webhook/apm-<tarea>
-                Header: X-APM-Secret: <secreto por workflow>
+Production:  https://<your-n8n>/webhook/<path>
+Test:        https://<your-n8n>/webhook-test/<path>
+```
+
+- The production URL is registered **when the workflow is published**; the test one only lasts **120 seconds**
+  after pressing "Listen for Test Event".
+- The production URL is built from the `WEBHOOK_URL` environment variable; the test one from
+  `N8N_EDITOR_BASE_URL`. If your n8n is behind NPM and the URLs come out with `localhost:5678`,
+  `WEBHOOK_URL` is missing from the docker-compose.
+
+**Webhook node authentication** (✅ verified): `Basic auth`, `Header auth`, `JWT auth`, `None`.
+→ Use **Header auth** with a long secret per workflow. Never leave `None` on an internet-reachable webhook.
+
+**Response modes** (✅ verified): `Immediately` (returns "Workflow got started"),
+`When Last Node Finishes`, `Using 'Respond to Webhook' Node`, and **`Streaming response`**.
+
+Recommended pattern for APM:
+
+```
+APM  --POST--> https://n8n.your-domain.com/webhook/apm-<task>
+                Header: X-APM-Secret: <per-workflow secret>
                 Body:   { runId, tenantId, params }
-     <--202--   respuesta Immediately (no bloquees al agente)
+     <--202--   Immediately response (don't block the agent)
 
 APM  --GET-->  /api/v1/executions?workflowId=<id>&status=running|success|error
                 Header: X-N8N-API-KEY: <key>
 ```
 
-Es decir: **dispara por webhook, monitorea por API, correlaciona por `workflowId` + tu propio `runId`**.
+That is: **trigger via webhook, monitor via API, correlate by `workflowId` + your own `runId`**.
 
-⚠️ **Gotcha de correlación:** el webhook **no devuelve el `executionId`** en modo `Immediately`.
-Dos salidas: (a) usar modo `Using 'Respond to Webhook' Node` y devolver `{{ $execution.id }}` explícitamente,
-o (b) que el workflow haga un callback a APM al terminar. La opción (b) es más robusta y además te evita
-hacer polling. ⚠️ NO VERIFICADO que `$execution.id` esté disponible en tu versión — pruébalo antes de depender de ello.
-
----
-
-## 5. MCP Server Trigger de n8n
-
-✅ **VERIFICADO** — `https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-langchain.mcptrigger/`
-
-- Expone workflows de n8n como **herramientas MCP**. Las herramientas se enganchan al trigger mediante
-  el nodo **Custom n8n Workflow Tool**.
-- **Transportes:** SSE y **Streamable HTTP**. La doc **no marca SSE como deprecado**; dice explícitamente
-  que *"currently doesn't support standard input/output (stdio) transport"*.
-  ⚠️ En el ecosistema MCP general SSE sí está en retirada a favor de Streamable HTTP, pero **eso no está
-  escrito en la doc de n8n**. No lo afirmes como hecho.
-- **Auth:** Bearer auth o Header auth.
-- **URLs:** genera una de test y una de producción. El campo **Path** trae por defecto
-  *"a randomly generated MCP URL path, to avoid conflicts with other MCP Server Trigger nodes"*, y es editable.
-- ⚠️ **NO VERIFICADO al 100%:** el prefijo exacto. Las fuentes secundarias coinciden en `/mcp/<path>`
-  (producción) y `/mcp-test/<path>` (test), y la propia doc de n8n usa `location /mcp/` en su ejemplo de nginx,
-  lo que lo respalda fuertemente. Pero **la doc no publica la plantilla literal**.
-  → **Léela del panel del nodo**, no la construyas a mano.
-
-### MCP Client Tool — dirección contraria
-
-✅ **VERIFICADO** — nodo `toolmcp`. Sirve para que **n8n consuma MCPs externos**, no para exponer n8n.
-Soporta Bearer, header genérico, múltiples headers, OAuth2 y sin auth.
-
-**¿Nos sirve?** Para el puente APM→n8n, **no**. Pero tiene un uso futuro real: si algún día APM expone
-sus propias herramientas como MCP, los workflows de n8n podrían consumirlas con este nodo.
-Es la pieza del puente inverso, no de este.
+⚠️ **Correlation gotcha:** the webhook **doesn't return the `executionId`** in `Immediately` mode.
+Two ways out: (a) use `Using 'Respond to Webhook' Node` mode and return `{{ $execution.id }}` explicitly,
+or (b) have the workflow call back into APM when it finishes. Option (b) is more robust and also saves you
+polling. ⚠️ NOT VERIFIED that `$execution.id` is available in your version — test it before relying on it.
 
 ---
 
-## 6. ⭐ Configuración NPM/nginx para SSE — LISTA PARA PEGAR
+## 5. n8n's MCP Server Trigger
 
-Este es el gotcha que ya sufriste. La causa raíz: **nginx bufferiza la respuesta por defecto**.
-Con SSE el servidor nunca "termina" la respuesta, así que nginx se queda acumulando bytes que jamás
-envía, y el cliente ve un *cuelgue* o un timeout — sin ningún error en los logs.
+✅ **VERIFIED** — `https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-langchain.mcptrigger/`
 
-### 6.1 Fuente primaria: la propia doc de n8n
+- Exposes n8n workflows as **MCP tools**. Tools are attached to the trigger through
+  the **Custom n8n Workflow Tool** node.
+- **Transports:** SSE and **Streamable HTTP**. The docs **don't mark SSE as deprecated**; they say explicitly
+  that it *"currently doesn't support standard input/output (stdio) transport"*.
+  ⚠️ Across the wider MCP ecosystem SSE is being phased out in favor of Streamable HTTP, but **that isn't
+  written in n8n's docs**. Don't state it as fact.
+- **Auth:** Bearer auth or Header auth.
+- **URLs:** it generates a test one and a production one. The **Path** field defaults to
+  *"a randomly generated MCP URL path, to avoid conflicts with other MCP Server Trigger nodes"*, and it's editable.
+- ⚠️ **NOT 100% VERIFIED:** the exact prefix. Secondary sources agree on `/mcp/<path>`
+  (production) and `/mcp-test/<path>` (test), and n8n's own docs use `location /mcp/` in their nginx example,
+  which strongly supports it. But **the docs don't publish the literal template**.
+  → **Read it from the node's panel**, don't build it by hand.
 
-✅ **VERIFICADO — bloque textual de docs.n8n.io** (nodo MCP Server Trigger):
+### MCP Client Tool — the opposite direction
+
+✅ **VERIFIED** — the `toolmcp` node. It's for **n8n to consume external MCPs**, not to expose n8n.
+It supports Bearer, a generic header, multiple headers, OAuth2 and no auth.
+
+**Is it useful to us?** For the APM→n8n bridge, **no**. But it has a real future use: if APM ever exposes
+its own tools as MCP, n8n workflows could consume them with this node.
+It's the piece for the reverse bridge, not this one.
+
+---
+
+## 6. ⭐ NPM/nginx config for SSE — READY TO PASTE
+
+This is the gotcha that already bit us. Root cause: **nginx buffers the response by default**.
+With SSE the server never "finishes" the response, so nginx keeps accumulating bytes it never
+sends, and the client sees a *hang* or a timeout — with no error in the logs.
+
+### 6.1 Primary source: n8n's own docs
+
+✅ **VERIFIED — verbatim block from docs.n8n.io** (MCP Server Trigger node):
 
 > *"When running n8n behind a reverse proxy like nginx, you may experience problems if the MCP endpoint
 > isn't configured for SSE or streamable HTTP."*
@@ -207,59 +209,59 @@ location /mcp/ {
 }
 ```
 
-### 6.2 Bloque para el **Advanced tab de Nginx Proxy Manager** — n8n MCP
+### 6.2 Block for the **Nginx Proxy Manager Advanced tab** — n8n MCP
 
-NPM no te deja editar el `location` raíz, pero el **Advanced tab** del Proxy Host acepta bloques
-`location` completos que se inyectan dentro del `server {}`. Pega esto tal cual en el Proxy Host
-de tu n8n (p. ej. `n8n.tu-dominio.com`), pestaña **Advanced**:
+NPM doesn't let you edit the root `location`, but the Proxy Host's **Advanced tab** accepts full
+`location` blocks that get injected inside the `server {}`. Paste this as-is into your n8n's Proxy Host
+(e.g. `n8n.your-domain.com`), **Advanced** tab:
 
 ```nginx
-# ── n8n MCP / SSE ── Proxy Host: n8n.tu-dominio.com → Advanced tab ──
-# Solo afecta a las rutas MCP. El resto del sitio sigue con el proxy normal de NPM.
+# ── n8n MCP / SSE ── Proxy Host: n8n.your-domain.com → Advanced tab ──
+# Only affects the MCP routes. The rest of the site keeps NPM's normal proxy.
 
 location ^~ /mcp/ {
-    # OJO: ajusta al nombre/puerto real de tu contenedor n8n en la red de Docker.
+    # NOTE: adjust to the real name/port of your n8n container on the Docker network.
     proxy_pass http://n8n:5678;
 
-    # HTTP/1.1 obligatorio: con 1.0 nginx cierra la conexión tras cada respuesta
-    # y el stream SSE muere al primer evento.
+    # HTTP/1.1 is mandatory: with 1.0 nginx closes the connection after each response
+    # and the SSE stream dies at the first event.
     proxy_http_version 1.1;
 
-    # LA directiva clave. Sin esto nginx acumula el stream en memoria y no
-    # reenvía nada: el cliente ve un cuelgue silencioso, sin error en logs.
+    # THE key directive. Without it nginx accumulates the stream in memory and
+    # forwards nothing: the client sees a silent hang, no error in the logs.
     proxy_buffering off;
 
-    # No cachear un stream dinámico (nginx podría servir una respuesta muerta).
+    # Don't cache a dynamic stream (nginx could serve a dead response).
     proxy_cache off;
 
-    # gzip sobre SSE retrasa los eventos hasta llenar el buffer de compresión.
+    # gzip over SSE delays events until the compression buffer fills.
     gzip off;
 
-    # SSE ya trae su propio framing (event:/data:). Dejar que nginx aplique
-    # el suyo encima rompe el parseo en el cliente.
+    # SSE already has its own framing (event:/data:). Letting nginx apply
+    # its own on top breaks parsing on the client.
     chunked_transfer_encoding off;
 
-    # Vaciar Connection: evita heredar 'close' (o 'upgrade' de un bloque
-    # WebSocket vecino) de otra parte de la config. NO es proxying WebSocket.
+    # Empty Connection: avoids inheriting 'close' (or 'upgrade' from a neighboring
+    # WebSocket block) from elsewhere in the config. This is NOT WebSocket proxying.
     proxy_set_header Connection '';
 
-    # Timeouts largos: el default de nginx (60s) mata la sesión MCP a mitad.
+    # Long timeouts: nginx's default (60s) kills the MCP session halfway.
     proxy_read_timeout  86400s;
     proxy_send_timeout  86400s;
 
-    # Cinturón y tirantes: si algún día un proxy intermedio o un NPM actualizado
-    # reintroduce buffering, esta cabecera de respuesta lo desactiva igual.
+    # Belt and braces: if an intermediate proxy or an updated NPM ever
+    # reintroduces buffering, this response header disables it anyway.
     proxy_set_header X-Accel-Buffering no;
 
-    # Cabeceras estándar (NPM las pone en su bloque, no en el tuyo: repítelas).
+    # Standard headers (NPM sets them in its block, not yours: repeat them).
     proxy_set_header Host              $host;
     proxy_set_header X-Real-IP         $remote_addr;
     proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 }
 
-# Mismo tratamiento para el endpoint de test (dura 120s, pero si no lo
-# configuras vas a creer que tu MCP está roto cuando solo lo está el test).
+# Same treatment for the test endpoint (it lasts 120s, but if you don't
+# configure it you'll think your MCP is broken when only the test is).
 location ^~ /mcp-test/ {
     proxy_pass http://n8n:5678;
     proxy_http_version 1.1;
@@ -278,44 +280,44 @@ location ^~ /mcp-test/ {
 }
 ```
 
-**Notas de uso en NPM:**
+**Usage notes for NPM:**
 
-- `^~` hace que este `location` gane sobre los prefijos genéricos de NPM. Sin él, el bloque
-  de NPM puede capturar la ruta primero y tu config no se aplica nunca. Este es el error nº1.
-- ⚠️ **No actives el toggle "Websockets Support"** de NPM para esto. SSE **no** es WebSocket:
-  ese toggle inyecta `Connection: upgrade`, justo lo contrario de `Connection: ''`.
-- ⚠️ **`proxy_pass` con el nombre del contenedor** solo funciona si NPM y n8n comparten red Docker.
-  Si no, usa la IP del host y el puerto publicado. **Verifícalo con `docker network inspect` antes de pegar.**
-- Tras guardar, NPM recarga solo. Si el Proxy Host se pone en rojo, hay un error de sintaxis:
-  revisa con `docker logs <contenedor-npm>`.
-- ⚠️ **Con varias réplicas de n8n**, todas las peticiones `/mcp*` deben ir **a la misma réplica**
-  (la sesión MCP tiene estado). Tú tienes una sola instancia, así que no aplica hoy — pero anótalo.
+- `^~` makes this `location` win over NPM's generic prefixes. Without it, NPM's block
+  can capture the route first and your config is never applied. This is mistake #1.
+- ⚠️ **Don't enable NPM's "Websockets Support" toggle** for this. SSE is **not** WebSocket:
+  that toggle injects `Connection: upgrade`, exactly the opposite of `Connection: ''`.
+- ⚠️ **`proxy_pass` with the container name** only works if NPM and n8n share a Docker network.
+  If not, use the host IP and the published port. **Check with `docker network inspect` before pasting.**
+- After saving, NPM reloads on its own. If the Proxy Host turns red, there's a syntax error:
+  check with `docker logs <npm-container>`.
+- ⚠️ **With several n8n replicas**, all `/mcp*` requests must go **to the same replica**
+  (the MCP session is stateful). You have a single instance, so it doesn't apply today — but note it.
 
-**Cómo comprobar que funciona** (el test que no miente):
+**How to check it works** (the test that doesn't lie):
 
 ```bash
-curl -N -i https://n8n.tu-dominio.com/mcp/<tu-path> \
+curl -N -i https://n8n.your-domain.com/mcp/<your-path> \
   -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer <token>"
 ```
 
-`-N` desactiva el buffering **de curl**, para no confundir un fallo tuyo con uno de nginx.
-Si ves eventos llegando poco a poco → bien. Si se queda mudo y luego corta → sigue habiendo buffering.
+`-N` turns off **curl's** buffering, so you don't mistake a failure of yours for nginx's.
+If you see events arriving bit by bit → good. If it goes silent and then cuts → there's still buffering.
 
-⚠️ **Síntoma verificado que despista mucho:** si recibes
-`Error: Unexpected token '<', "<!DOCTYPE "... is not valid JSON`, **no es buffering**.
-Es que falta el header `Accept: application/json, text/event-stream` en la petición.
-n8n rechaza peticiones MCP que no acepten ambos tipos y devuelve HTML.
+⚠️ **A verified symptom that's very misleading:** if you get
+`Error: Unexpected token '<', "<!DOCTYPE "... is not valid JSON`, **it's not buffering**.
+It's the missing `Accept: application/json, text/event-stream` header on the request.
+n8n rejects MCP requests that don't accept both types and returns HTML.
 
-### 6.3 El mismo problema en NUESTRO endpoint SSE de APM
+### 6.3 The same problem on OUR APM SSE endpoint
 
-`apm.tu-dominio.com` va a hacer streaming del chat del agente. **Sufre exactamente lo mismo.**
-Bloque para el Advanced tab del Proxy Host de APM:
+`apm.your-domain.com` streams the agent chat. **It suffers exactly the same.**
+Block for the APM Proxy Host's Advanced tab:
 
 ```nginx
-# ── APM streaming del chat ── Proxy Host: apm.tu-dominio.com → Advanced tab ──
+# ── APM chat streaming ── Proxy Host: apm.your-domain.com → Advanced tab ──
 location ^~ /api/chat/stream {
-    proxy_pass http://centro-de-mando:3000;   # ajusta contenedor:puerto
+    proxy_pass http://apm-web:80;   # adjust container:port
 
     proxy_http_version 1.1;
     proxy_buffering off;
@@ -324,8 +326,8 @@ location ^~ /api/chat/stream {
     chunked_transfer_encoding off;
     proxy_set_header Connection '';
 
-    # Una conversación larga con el Agent SDK puede pensar minutos entre tokens.
-    # 3600s es un punto medio sensato; 86400s si vas a tener sesiones muy largas.
+    # A long conversation with the Agent SDK can think for minutes between tokens.
+    # 3600s is a sensible middle ground; 86400s if you'll have very long sessions.
     proxy_read_timeout  3600s;
     proxy_send_timeout  3600s;
 
@@ -338,314 +340,315 @@ location ^~ /api/chat/stream {
 }
 ```
 
-✅ **La defensa más robusta va en el código de APM, no en nginx.** Emite estas cabeceras **de respuesta**
-desde el propio endpoint. `X-Accel-Buffering: no` es una cabecera que nginx honra específicamente,
-y así el streaming sigue funcionando aunque alguien toque la config de NPM en el futuro:
+✅ **The most robust defense goes in APM's code, not in nginx.** Emit these **response** headers
+from the endpoint itself. `X-Accel-Buffering: no` is a header nginx honors specifically,
+so streaming keeps working even if someone touches the NPM config in the future:
 
 ```js
 res.writeHead(200, {
   'Content-Type':      'text/event-stream',
-  'Cache-Control':     'no-cache, no-transform', // no-transform frena a proxies intermedios
+  'Cache-Control':     'no-cache, no-transform', // no-transform stops intermediate proxies
   'Connection':        'keep-alive',
-  'X-Accel-Buffering': 'no',                     // nginx: no bufferices esta respuesta
+  'X-Accel-Buffering': 'no',                     // nginx: don't buffer this response
 });
 ```
 
-Truco extra: manda un comentario SSE de keepalive (`res.write(': ping\n\n')`) cada ~25 s.
-Mantiene viva la conexión frente a timeouts intermedios y detecta clientes muertos.
+Extra trick: send an SSE keepalive comment (`res.write(': ping\n\n')`) every ~25 s.
+It keeps the connection alive against intermediate timeouts and detects dead clients.
+(Both are what `api/runs.js` does.)
 
 ---
 
-## 7. czlonkowski/n8n-mcp — verificación
+## 7. czlonkowski/n8n-mcp — verification
 
-✅ **VERIFICADO** (API de GitHub + README, 2026-08-02)
+✅ **VERIFIED** (GitHub API + README, 2026-08-02)
 
-| Dato | Valor |
+| Fact | Value |
 |---|---|
 | Repo | `czlonkowski/n8n-mcp` |
-| Estrellas | **22.470** |
-| Licencia | **MIT** |
-| Último push | **2026-07-30** (activo) |
-| Archivado | No |
+| Stars | **22,470** |
+| License | **MIT** |
+| Last push | **2026-07-30** (active) |
+| Archived | No |
 
-**Qué hace:** servidor MCP que le da a Claude conocimiento estructurado de los nodos de n8n
-(~2.285 nodos, 828 core + 1.457 community, y ~2.352 plantillas) para que **construya y valide workflows**.
-Son 7 herramientas de documentación/validación + **16 herramientas de gestión opt-in** que requieren
-`N8N_API_URL` y `N8N_API_KEY`: CRUD de workflows, ejecuciones, credenciales, data tables y auditoría de seguridad.
+**What it does:** an MCP server that gives Claude structured knowledge of n8n's nodes
+(~2,285 nodes, 828 core + 1,457 community, and ~2,352 templates) so it can **build and validate workflows**.
+There are 7 documentation/validation tools + **16 opt-in management tools** that require
+`N8N_API_URL` and `N8N_API_KEY`: workflow CRUD, executions, credentials, data tables and security auditing.
 
-**¿Es seguro apuntarlo a PRODUCCIÓN?** ✅ El propio README responde, en mayúsculas:
+**Is it safe to point at PRODUCTION?** ✅ The README itself answers, in capitals:
 
-> *"NEVER edit your production workflows directly with AI!"* — y añade que hay que copiar el workflow,
-> probar en desarrollo y validar antes de desplegar, porque *"AI results can be unpredictable. Protect your work!"*
+> *"NEVER edit your production workflows directly with AI!"* — and adds that you should copy the workflow,
+> test in development and validate before deploying, because *"AI results can be unpredictable. Protect your work!"*
 
-**Recomendación concreta para ti:**
+**Concrete recommendation:**
 
-- **Sí úsalo** en tu portátil/sesión de Claude Code para **escribir** workflows nuevos. Es excelente en eso.
-- **No** lo conectes a `n8n.tu-dominio.com` con una API key de escritura. Tienes 6 workflows en producción
-  (incluida la content factory) y una API key sin scopes = acceso total.
-- Si aun así lo conectas, usa **`DISABLED_TOOLS`** para apagar las operaciones de escritura (verificado que existe).
-- Las herramientas de gestión **están desactivadas por defecto** si no configuras las env vars — o sea,
-  el modo seguro es el default. Bien diseñado.
-- ⚠️ **NO VERIFICADO:** el README dice "current support: n8n 2.31.6+". Comprueba tu versión (`docker exec ... n8n --version`)
-  antes de asumir compatibilidad.
+- **Do use it** on your laptop / Claude Code session to **write** new workflows. It's excellent at that.
+- **Don't** connect it to your production n8n with a write API key. There are 6 workflows in production
+  (including the content factory) and a scope-less API key = full access.
+- If you connect it anyway, use **`DISABLED_TOOLS`** to turn off the write operations (verified it exists).
+- The management tools **are disabled by default** if you don't set the env vars — i.e.
+  safe mode is the default. Well designed.
+- ⚠️ **NOT VERIFIED:** the README says "current support: n8n 2.31.6+". Check your version (`docker exec ... n8n --version`)
+  before assuming compatibility.
 
 ---
 
-## 8. Lo mejor valorado en GitHub (búsqueda abierta)
+## 8. The best rated on GitHub (open search)
 
-Búsqueda vía GitHub Search API ordenada por estrellas, con fecha de último push. Datos del **2026-08-02**.
+Search via the GitHub Search API sorted by stars, with last-push date. Data from **2026-08-02**.
 
-### 8.1 n8n + MCP / agentes
+### 8.1 n8n + MCP / agents
 
-| # | Repo | ★ | Licencia | Último push | ¿Aporta algo sobre usar la REST API de n8n? |
+| # | Repo | ★ | License | Last push | Does it add anything over using the n8n REST API? |
 |---|---|---|---|---|---|
-| 1 | `n8n-io/n8n` | **199.048** | Other (fair-code) | 2026-08-02 | Fuente de verdad. ⚠️ **No es OSI-open**: licencia "Sustainable Use" |
-| 2 | `czlonkowski/n8n-mcp` | **22.470** | MIT | 2026-07-30 | Sí — envuelve la API en 16 tools opt-in. Referencia de cómo NO exponerla |
-| 3 | `nerding-io/n8n-nodes-mcp` | 3.028 | MIT | **2026-01-02** ⚠️ | Nodo community pre-oficial. **7 meses sin push** — obsoleto: n8n ya trae MCP nativo |
-| 4 | `leonardsellem/n8n-mcp-server` | 1.633 | MIT | **2025-07-09** ⚠️ | *"MCP server for interacting with n8n API"*. **13 meses sin push: descartado** |
-| 5 | `bytechefhq/bytechef` | 937 | Other | 2026-07-31 | Competidor de n8n, no integración. Informativo |
-| 6 | `freddy-schuetz/n8n-claw` | 542 | **Ninguna** ⚠️ | 2026-07-31 | Agente autónomo en n8n. **Sin licencia = no reutilizable legalmente** |
-| 7 | `makafeli/n8n-workflow-builder` | 532 | MIT | 2026-03-19 | Solapa con n8n-mcp, menos mantenido |
-| 8 | `CoreWorxLab/CAAL` | 432 | MIT | 2026-05-25 | **Interesante como patrón:** autodescubre workflows de n8n y los expone como tools MCP |
-| 9 | `salacoste/mcp-n8n-workflow-builder` | 230 | MIT | 2026-04-12 | Otro clon de menor tracción |
+| 1 | `n8n-io/n8n` | **199,048** | Other (fair-code) | 2026-08-02 | The source of truth. ⚠️ **Not OSI-open**: "Sustainable Use" license |
+| 2 | `czlonkowski/n8n-mcp` | **22,470** | MIT | 2026-07-30 | Yes — wraps the API in 16 opt-in tools. A reference for how NOT to expose it |
+| 3 | `nerding-io/n8n-nodes-mcp` | 3,028 | MIT | **2026-01-02** ⚠️ | A pre-official community node. **7 months without a push** — obsolete: n8n ships native MCP now |
+| 4 | `leonardsellem/n8n-mcp-server` | 1,633 | MIT | **2025-07-09** ⚠️ | *"MCP server for interacting with n8n API"*. **13 months without a push: ruled out** |
+| 5 | `bytechefhq/bytechef` | 937 | Other | 2026-07-31 | An n8n competitor, not an integration. Informative |
+| 6 | `freddy-schuetz/n8n-claw` | 542 | **None** ⚠️ | 2026-07-31 | An autonomous agent in n8n. **No license = not legally reusable** |
+| 7 | `makafeli/n8n-workflow-builder` | 532 | MIT | 2026-03-19 | Overlaps n8n-mcp, less maintained |
+| 8 | `CoreWorxLab/CAAL` | 432 | MIT | 2026-05-25 | **Interesting as a pattern:** auto-discovers n8n workflows and exposes them as MCP tools |
+| 9 | `salacoste/mcp-n8n-workflow-builder` | 230 | MIT | 2026-04-12 | Another lower-traction clone |
 
-**Conclusión de esta búsqueda:** hay **un solo ganador claro** (`czlonkowski/n8n-mcp`, 22k★ y activo)
-y una larga cola de proyectos abandonados. Nada de esto es un cliente de la REST API que merezca adoptarse.
+**Conclusion of this search:** there's **a single clear winner** (`czlonkowski/n8n-mcp`, 22k★ and active)
+and a long tail of abandoned projects. None of it is a REST API client worth adopting.
 
-### 8.2 Clientes de la REST API de n8n en TypeScript
+### 8.2 TypeScript clients for the n8n REST API
 
-Búsqueda `n8n api client typescript` ordenada por estrellas — el resultado es **demoledor**:
-el repo mejor valorado tiene **10 estrellas** (`yoanhuke/laravel-n8n`, PHP), y el único cliente
-TypeScript (`egose/n8n-toolkit`, Apache-2.0) tiene **1 estrella**.
+Search `n8n api client typescript` sorted by stars — the result is **crushing**:
+the best-rated repo has **10 stars** (`yoanhuke/laravel-n8n`, PHP), and the only TypeScript client
+(`egose/n8n-toolkit`, Apache-2.0) has **1 star**.
 
-✅ **Conclusión con dato duro: no existe cliente de la API de n8n que valga la pena.**
-→ **Usa `fetch` nativo.** La API son ~15 endpoints REST con un header. Una dependencia de 1 estrella
-para eso es puro riesgo de supply chain. Escribe 80 líneas propias y tienes control total.
+✅ **Conclusion backed by hard data: there's no n8n API client worth using.**
+→ **Use native `fetch`.** The API is ~15 REST endpoints with one header. A 1-star dependency for that
+is pure supply-chain risk. Write 80 lines of your own and you have full control.
 
-### 8.3 Schedulers / colas de trabajos para Node
+### 8.3 Job schedulers / queues for Node
 
-| # | Repo | ★ | Licencia | Último push | Último release | Issues abiertas |
+| # | Repo | ★ | License | Last push | Last release | Open issues |
 |---|---|---|---|---|---|---|
-| 1 | `taskforcesh/bullmq` | **9.232** | MIT | 2026-08-02 | **v6.0.5 (2026-08-01)** | **378** |
-| 2 | `timgit/pg-boss` | **3.818** | MIT | 2026-08-01 | **12.26.4 (2026-08-01)** | **25** |
-| 3 | `graphile/worker` | 2.351 | MIT | 2026-07-08 | — | 43 |
-| 4 | `sidequestjs/sidequest` | 1.009 | **LGPL-3.0** ⚠️ | 2026-07-22 | — | — |
+| 1 | `taskforcesh/bullmq` | **9,232** | MIT | 2026-08-02 | **v6.0.5 (2026-08-01)** | **378** |
+| 2 | `timgit/pg-boss` | **3,818** | MIT | 2026-08-01 | **12.26.4 (2026-08-01)** | **25** |
+| 3 | `graphile/worker` | 2,351 | MIT | 2026-07-08 | — | 43 |
+| 4 | `sidequestjs/sidequest` | 1,009 | **LGPL-3.0** ⚠️ | 2026-07-22 | — | — |
 
-⚠️ **Sobre LGPL-3.0 en `sidequest`:** para un SaaS servido por red la LGPL es manejable, pero introduce
-obligaciones de relinking que MIT no tiene. **Descartado por licencia, no por calidad.**
+⚠️ **On LGPL-3.0 in `sidequest`:** for a network-served SaaS the LGPL is manageable, but it brings
+relinking obligations MIT doesn't have. **Ruled out by license, not quality.**
 
-**Los tres primeros están vivos y son MIT.** No hay ganador por abandono: hay que decidir por arquitectura.
+**The top three are alive and MIT.** There's no winner by abandonment: the decision is architectural.
 
-⚠️ **NO VERIFICADO — dato que debes comprobar tú:** la descripción del repo de BullMQ en GitHub dice
-literalmente *"based on Redis **or PostgreSQL**"*, y la v6 introdujo "pluggable queue backends".
-**Pero la página de novedades de bullmq.io sigue describiéndolo como "Redis-backed" y no confirma
-un backend Postgres.** No des por hecho que BullMQ funciona sobre Postgres sin verificarlo en su doc oficial.
-Si resultara maduro, cambiaría el análisis de abajo.
-
----
-
-## 9. Recomendación: MCP Server Trigger vs REST API + webhooks
-
-### 🏆 **REST API + webhooks. Sin dudarlo, para la v1.**
-
-**Pros de REST API + webhooks:**
-
-- ✅ HTTP normal: **cero problemas con NPM.** No hay SSE, no hay buffering, no hay timeouts largos.
-- ✅ El monitoreo es *mejor*: `GET /executions` da estado, historial, datos y errores.
-  MCP no expone historial de ejecuciones **en absoluto**.
-- ✅ `POST /executions/{id}/retry` y `/stop` dan control operativo real.
-- ✅ Depurable con `curl`. Cuando falle a las 2 AM, lo arreglas.
-- ✅ Sin sesiones con estado: si APM se reinicia a mitad, no se pierde nada.
-- ✅ La auth es un header. Ya sabes gestionar eso.
-
-**Contras:**
-
-- ❌ Dos mecanismos en vez de uno (webhook para disparar, API para leer).
-- ❌ Necesitas polling o callback para saber cuándo terminó. Es un poco de código.
-- ❌ Un webhook nuevo por cada tarea nueva (aunque puedes hacer uno genérico con router).
-
-**Pros de MCP Server Trigger:**
-
-- ✅ Claude *descubre* las tools solo. Elegante para casos abiertos donde no sabes de antemano qué llamará.
-- ✅ Una sola integración conceptual.
-
-**Contras (los que pesan):**
-
-- ❌ **Exige SSE/streaming detrás de NPM — el fallo que ya sufriste.** Y no solo una vez: cada
-  actualización de NPM puede reintroducirlo.
-- ❌ **No da historial de ejecuciones.** Necesitarías la REST API igualmente → no ahorras nada.
-- ❌ Sesiones con estado: reinicios de APM, de n8n o de NPM las rompen.
-- ❌ Superficie de fallo más grande para depurar (SSE + auth + sesión + buffering).
-- ❌ ⚠️ El prefijo exacto de la URL ni siquiera está publicado en la doc.
-
-**El argumento decisivo:** MCP **no elimina** la REST API — la necesitas igual para monitorear.
-Así que MCP no es "una opción en vez de la otra", es **una capa extra encima de la que igual vas a construir**,
-y la capa extra es precisamente la que rompe detrás de tu proxy.
-
-**Cuándo reconsiderarlo (fase 2):** cuando tengas 20+ workflows y quieras que el agente elija
-dinámicamente cuál usar sin que tú lo cablees. Entonces MCP gana de verdad. Con 6 workflows, no.
+⚠️ **NOT VERIFIED — a fact you should check:** BullMQ's GitHub description literally says
+*"based on Redis **or PostgreSQL**"*, and v6 introduced "pluggable queue backends".
+**But bullmq.io's news page still describes it as "Redis-backed" and doesn't confirm
+a Postgres backend.** Don't assume BullMQ works on Postgres without checking its official docs.
+If it turned out to be mature, the analysis below would change.
 
 ---
 
-## 10. Recomendación de scheduler: pg-boss
+## 9. Recommendation: MCP Server Trigger vs REST API + webhooks
 
-### 🏆 **pg-boss dentro de APM.**
+### 🏆 **REST API + webhooks. No doubt about it, for v1.**
 
-**Los datos duros primero** (no opinión):
+**Pros of REST API + webhooks:**
 
-| Criterio | pg-boss | BullMQ | graphile-worker | Schedule Trigger n8n |
+- ✅ Plain HTTP: **zero problems with NPM.** No SSE, no buffering, no long timeouts.
+- ✅ Monitoring is *better*: `GET /executions` gives status, history, data and errors.
+  MCP doesn't expose execution history **at all**.
+- ✅ `POST /executions/{id}/retry` and `/stop` give real operational control.
+- ✅ Debuggable with `curl`. When it fails at 2 AM, you fix it.
+- ✅ No stateful sessions: if APM restarts halfway, nothing is lost.
+- ✅ Auth is a header. You already know how to manage that.
+
+**Cons:**
+
+- ❌ Two mechanisms instead of one (webhook to trigger, API to read).
+- ❌ You need polling or a callback to know when it finished. A bit of code.
+- ❌ A new webhook for each new task (though you can make a generic one with a router).
+
+**Pros of the MCP Server Trigger:**
+
+- ✅ Claude *discovers* the tools on its own. Elegant for open-ended cases where you don't know in advance what it will call.
+- ✅ A single conceptual integration.
+
+**Cons (the ones that weigh):**
+
+- ❌ **It requires SSE/streaming behind NPM — the failure we already suffered.** And not just once: every
+  NPM update can reintroduce it.
+- ❌ **It gives no execution history.** You'd need the REST API anyway → you save nothing.
+- ❌ Stateful sessions: restarts of APM, n8n or NPM break them.
+- ❌ A bigger failure surface to debug (SSE + auth + session + buffering).
+- ❌ ⚠️ The exact URL prefix isn't even published in the docs.
+
+**The decisive argument:** MCP **doesn't eliminate** the REST API — you need it anyway to monitor.
+So MCP isn't "one option instead of the other", it's **an extra layer on top of the one you'll build anyway**,
+and the extra layer is precisely the one that breaks behind your proxy.
+
+**When to reconsider (phase 2):** when you have 20+ workflows and want the agent to choose
+dynamically which one to use without you wiring it. Then MCP truly wins. With 6 workflows, no.
+
+---
+
+## 10. Scheduler recommendation: pg-boss
+
+### 🏆 **pg-boss inside APM.**
+
+**Hard data first** (not opinion):
+
+| Criterion | pg-boss | BullMQ | graphile-worker | n8n Schedule Trigger |
 |---|---|---|---|---|
-| Estrellas | 3.818 | **9.232** | 2.351 | (parte de n8n) |
-| Licencia | **MIT** ✅ | **MIT** ✅ | **MIT** ✅ | Fair-code ⚠️ |
-| Último release | **2026-08-01** ✅ | **2026-08-01** ✅ | 2026-07-08 | — |
-| Issues abiertas | **25** ✅ | 378 | 43 | — |
-| Infra nueva | **Ninguna** ✅ | Redis | Ninguna | Ninguna |
-| Cron recurrente | ✅ nativo | ✅ repeatable jobs | ✅ | ✅ |
-| Transaccional con tus datos | ✅ **mismo Postgres** | ❌ | ✅ | ❌ |
+| Stars | 3,818 | **9,232** | 2,351 | (part of n8n) |
+| License | **MIT** ✅ | **MIT** ✅ | **MIT** ✅ | Fair-code ⚠️ |
+| Last release | **2026-08-01** ✅ | **2026-08-01** ✅ | 2026-07-08 | — |
+| Open issues | **25** ✅ | 378 | 43 | — |
+| New infra | **None** ✅ | Redis | None | None |
+| Recurring cron | ✅ native | ✅ repeatable jobs | ✅ | ✅ |
+| Transactional with your data | ✅ **same Postgres** | ❌ | ✅ | ❌ |
 
-**Por qué pg-boss y no BullMQ, pese a que BullMQ tiene 2,4× estrellas:**
+**Why pg-boss and not BullMQ, even though BullMQ has 2.4× the stars:**
 
-1. **Atomicidad transaccional.** Este es el argumento real. APM guarda estado en Postgres.
-   Con pg-boss puedes hacer `INSERT` de tu dato **y** encolar el job **en la misma transacción**.
-   Si el commit falla, no queda un job huérfano apuntando a una fila inexistente.
-   Con BullMQ + Redis eso es imposible: son dos sistemas, y tendrás bugs de "el job existe pero el dato no".
-   Con 6 workflows y scrapes diarios, ese bug **va a pasar**.
-2. **Ya tienes Redis, sí — pero es de otro.** Tu Redis en `/opt/redis` sirve a otras cosas.
-   Meterle la cola de APM acopla dos sistemas: un `FLUSHALL` o un reinicio de mantenimiento
-   se lleva por delante tus jobs programados. Postgres ya lo tratas como dato sagrado (tienes backups
-   cifrados en cron a R2, verificados). **Los jobs de APM merecen ese nivel de cuidado; el cache no lo tiene.**
-3. **Durabilidad.** Redis por defecto no es durable. Postgres sí, y ya está respaldado.
-4. **Señal de mantenimiento a favor de pg-boss:** 25 issues abiertas frente a 378 de BullMQ.
-   Con un ratio issues/estrellas de 0,7% vs 4,1%, pg-boss está claramente mejor atendido en proporción.
-   Ambos publicaron release el 2026-08-01, así que la actividad es empatada; la diferencia es la deuda.
-5. **Menos piezas.** Un servicio menos que monitorear, respaldar y reiniciar en tu VPS.
+1. **Transactional atomicity.** This is the real argument. APM stores state in Postgres.
+   With pg-boss you can `INSERT` your data **and** enqueue the job **in the same transaction**.
+   If the commit fails, no orphan job is left pointing at a nonexistent row.
+   With BullMQ + Redis that's impossible: they're two systems, and you'll get "the job exists but the data doesn't" bugs.
+   With 6 workflows and daily scrapes, that bug **will happen**.
+2. **Yes, there's already a Redis — but it belongs to someone else.** The server's Redis serves other things.
+   Putting APM's queue in it couples two systems: a `FLUSHALL` or a maintenance restart
+   wipes out your scheduled jobs. Postgres is already treated as sacred data (encrypted,
+   verified backups in cron). **APM's jobs deserve that level of care; the cache doesn't get it.**
+3. **Durability.** Redis isn't durable by default. Postgres is, and it's already backed up.
+4. **Maintenance signal in pg-boss's favor:** 25 open issues vs BullMQ's 378.
+   With an issues/stars ratio of 0.7% vs 4.1%, pg-boss is clearly better tended in proportion.
+   Both shipped a release on 2026-08-01, so activity is tied; the difference is the debt.
+5. **Fewer pieces.** One less service to monitor, back up and restart on the VPS.
 
-**Cuándo BullMQ sería mejor:** decenas de miles de jobs por minuto, o necesidad de flows/hijos
-complejos. No es tu caso ni de lejos: hablamos de scrapes diarios y reportes semanales.
+**When BullMQ would be better:** tens of thousands of jobs per minute, or a need for complex
+flows/children. Nowhere near our case: we're talking daily scrapes and weekly reports.
 
-**graphile-worker:** técnicamente excelente y también Postgres-native. Pierde contra pg-boss por
-tracción (2.351 vs 3.818 ★) y por API menos orientada a scheduling declarativo. Es la segunda opción válida.
+**graphile-worker:** technically excellent and also Postgres-native. It loses to pg-boss on
+traction (2,351 vs 3,818 ★) and an API less geared to declarative scheduling. It's the second valid choice.
 
-### ¿Y programar dentro de n8n con Schedule Trigger?
+### What about scheduling inside n8n with the Schedule Trigger?
 
-**Recomendación: híbrida, con una regla clara de quién manda.**
+**Recommendation: hybrid, with a clear rule about who's in charge.**
 
-| El trabajo es... | Prográmalo en | Por qué |
+| The job is… | Schedule it in | Why |
 |---|---|---|
-| Un workflow de n8n de principio a fin (scrape → transformar → guardar) | **n8n (Schedule Trigger)** | No metas a APM de intermediario sin razón. Menos saltos, menos fallos |
-| Lógica del agente (razonar, resumir, decidir, llamar al Agent SDK) | **APM (pg-boss)** | Reintentos, estado y logs en tu dominio, no en la UI de n8n |
-| Mixto: n8n recolecta y el agente razona | **APM (pg-boss)** dispara el webhook de n8n | Quien orquesta debe ser quien tiene el estado |
+| An n8n workflow from start to finish (scrape → transform → store) | **n8n (Schedule Trigger)** | Don't put APM in the middle without reason. Fewer hops, fewer failures |
+| Agent logic (reason, summarize, decide, call the Agent SDK) | **APM (pg-boss)** | Retries, state and logs in your domain, not in n8n's UI |
+| Mixed: n8n collects and the agent reasons | **APM (pg-boss)** triggers the n8n webhook | Whoever orchestrates must be whoever holds the state |
 
-**La regla:** *el que necesita saber si funcionó, es el que programa.*
-Si APM debe reaccionar al resultado, APM programa. Si es fire-and-forget de datos, n8n programa.
+**The rule:** *whoever needs to know whether it worked is the one who schedules it.*
+If APM must react to the result, APM schedules. If it's fire-and-forget data, n8n schedules.
 
-⚠️ **Un aviso sobre poner todo en n8n:** perderías el historial en la base de datos de APM y dependerías
-de la retención de ejecuciones de n8n (que se purga). Para reportes semanales que quieras auditar meses
-después, **pg-boss + tu propia tabla** es la opción defendible.
+⚠️ **A warning about putting everything in n8n:** you'd lose history in APM's database and depend
+on n8n's execution retention (which gets purged). For weekly reports you'll want to audit months
+later, **pg-boss + your own table** is the defensible option.
 
 ---
 
-## 11. Arquitectura recomendada (resumen visual)
+## 11. Recommended architecture (visual summary)
 
 ```
                         ┌──────────────────────────────┐
-   Navegador ──SSE──────│  apm.tu-dominio.com  (APM)      │
+   Browser ────SSE──────│  apm.your-domain.com  (APM)  │
    (chat streaming)     │  Claude Agent SDK            │
-   ▲ necesita §6.3      │  pg-boss (Postgres propio)   │
+   ▲ needs §6.3         │  pg-boss (own Postgres)      │
                         └───────┬──────────────▲───────┘
                                 │              │
              POST /webhook/… ───┘              └─── GET /api/v1/executions
              Header auth                            X-N8N-API-KEY
                                 │              │
                         ┌───────▼──────────────┴───────┐
-                        │  n8n.tu-dominio.com             │
+                        │  n8n.your-domain.com         │
                         │  6 workflows + content factory│
                         └──────────────────────────────┘
-                     (ambos detrás de Nginx Proxy Manager)
+                     (both behind Nginx Proxy Manager)
 ```
 
-**Solo el enlace navegador↔APM necesita la config anti-buffering.** Los dos enlaces APM↔n8n son
-HTTP normal. Esa es exactamente la razón de elegir REST+webhooks sobre MCP.
+**Only the browser↔APM link needs the anti-buffering config.** Both APM↔n8n links are
+plain HTTP. That's exactly the reason to choose REST+webhooks over MCP.
 
 ---
 
-## 12. Plan de implementación
+## 12. Implementation plan
 
-1. Crear API key en n8n (Settings → n8n API). **Anotar la fecha de expiración en el calendario.**
-2. Guardar `N8N_API_URL=https://n8n.tu-dominio.com/api/v1` y `N8N_API_KEY` en el `.env` de APM. **Nunca en git.**
-   ⚠️ Recuerda que el `.env` ya se filtró una vez a git (01/08/2026) — verifica el `.gitignore` antes.
-3. Escribir un cliente propio con `fetch` (~80 líneas): `listWorkflows()`, `getExecutions()`,
-   `getExecution(id)`, `retryExecution(id)`. **Sin dependencias** (§8.2).
-4. Añadir un nodo Webhook con **Header auth** a cada workflow que APM deba disparar.
-5. Pegar el bloque de §6.3 en el Advanced tab de `apm.tu-dominio.com` **y** emitir `X-Accel-Buffering: no`
-   desde el código. Probar con `curl -N`.
-6. Instalar pg-boss apuntando al Postgres existente, **en su propio schema** (`pgboss`) para no mezclar
-   con las tablas de n8n ni con las tuyas.
-7. Migrar los recurrentes según la tabla de §10.
-8. (Opcional, más adelante) Evaluar MCP Server Trigger con el bloque de §6.2 ya probado.
-
----
-
-## ⚠️ Correcciones
-
-Errores y suposiciones falsas detectadas durante esta investigación. Léelo antes que nada:
-
-1. **"La REST API de n8n puede ejecutar workflows"** — ❌ **FALSO.** No existe `POST /workflows/{id}/run`
-   ni equivalente. **Verificado** contra la referencia oficial del recurso Workflow. El disparo **solo**
-   es posible por webhook (o Schedule/otro trigger). Esta suposición, muy extendida en blogs, habría
-   invalidado el diseño entero. **Es el hallazgo más importante de este documento.**
-
-2. **"SSE está deprecado en el MCP Server Trigger de n8n"** — ⚠️ **NO VERIFICADO.** La doc de n8n lista
-   SSE y Streamable HTTP **sin marcar ninguno como deprecado**. Lo único que dice explícitamente es que
-   *no* soporta stdio. La deprecación de SSE es una tendencia del ecosistema MCP general, **no un hecho
-   documentado por n8n**. No lo repitas como cierto.
-
-3. **"Activar 'Websockets Support' en NPM arregla SSE"** — ❌ **FALSO y contraproducente.** Ese toggle
-   inyecta `Connection: upgrade`, mientras que SSE requiere `Connection: ''` (vaciarlo). Son mecanismos
-   distintos. Activarlo empeora el problema.
-
-4. **"Con `proxy_buffering off` ya está resuelto"** — ⚠️ **INCOMPLETO.** Hacen falta al menos cinco
-   directivas más: `proxy_http_version 1.1`, `proxy_set_header Connection ''`, `gzip off`,
-   `chunked_transfer_encoding off` y timeouts largos. Los timeouts por defecto (60 s) matan la conexión
-   igual aunque el buffering esté desactivado — y el síntoma es idéntico, lo que despista muchísimo.
-
-5. **`Unexpected token '<', "<!DOCTYPE "...` NO es un problema de buffering** — es que falta el header
-   `Accept: application/json, text/event-stream`. Perseguir la config de nginx por este error es una
-   pérdida de horas garantizada.
-
-6. **"BullMQ ya soporta PostgreSQL"** — ⚠️ **NO VERIFICADO / CONTRADICTORIO.** La descripción del repo en
-   GitHub dice *"based on Redis or PostgreSQL"*, pero la página oficial de novedades de bullmq.io lo sigue
-   describiendo como Redis-backed y **no confirma** ese backend. Comprobar en su documentación antes de
-   apoyar ninguna decisión en ello.
-
-7. **"Más estrellas = mejor elección"** — ❌ BullMQ tiene 2,4× las estrellas de pg-boss y aun así **no** es
-   la recomendación. El criterio decisivo es la atomicidad transaccional con el Postgres que APM ya usa,
-   no la popularidad. (Nota de honestidad: la ratio de issues abiertas también favorece a pg-boss,
-   pero un proyecto más grande naturalmente acumula más issues — no lo interpretes como abandono de BullMQ,
-   que publicó release el mismo día.)
-
-8. **`POST /workflows/{id}/activate` está DEPRECADO** — usa `publish`/`unpublish`. Casi todos los tutoriales
-   de 2025 usan los viejos. ⚠️ Verifica cuáles acepta tu versión antes de cablearlos.
-
-9. **La API key de n8n self-hosted NO tiene scopes** — los scopes son solo Enterprise. Tu key tendrá
-   **acceso total**. De ahí la recomendación de no apuntar herramientas de IA con escritura a producción.
-
-10. **⚠️ NO VERIFICADO — el prefijo `/mcp/` y `/mcp-test/`.** Fuentes secundarias coinciden y el ejemplo
-    de nginx de la propia n8n usa `location /mcp/`, pero **la doc no publica la plantilla literal de la URL**.
-    Léela del panel del nodo. No la construyas a mano.
-
-11. **⚠️ NO VERIFICADO — `proxy_pass http://n8n:5678`.** Solo funciona si NPM y n8n comparten red Docker.
-    Comprueba con `docker network inspect` y ajusta antes de pegar el bloque.
-
-12. **La licencia de n8n no es open source OSI** — la API de GitHub la reporta como "Other"
-    (Sustainable Use License). Irrelevante para uso interno, pero **relevante si algún día revendes
-    la automatización como parte del producto a tus DSP.** Tenlo presente dado tu plan de SaaS multi-tenant.
+1. Create an API key in n8n (Settings → n8n API). **Put the expiration date in the calendar.**
+2. Store `N8N_API_URL=https://n8n.your-domain.com/api/v1` and `N8N_API_KEY` in APM's `.env`. **Never in git.**
+   ⚠️ Check the `.gitignore` first — a `.env` leaking into git has happened before on this server.
+3. Write our own client with `fetch` (~80 lines): `listWorkflows()`, `getExecutions()`,
+   `getExecution(id)`, `retryExecution(id)`. **No dependencies** (§8.2).
+4. Add a Webhook node with **Header auth** to each workflow APM must trigger.
+5. Paste the §6.3 block into APM's Advanced tab **and** emit `X-Accel-Buffering: no`
+   from the code. Test with `curl -N`.
+6. Install pg-boss pointing at the existing Postgres, **in its own schema** (`pgboss`) so it doesn't mix
+   with n8n's tables or yours.
+7. Migrate the recurring jobs according to the table in §10.
+8. (Optional, later) Evaluate the MCP Server Trigger with the §6.2 block already tested.
 
 ---
 
-## Fuentes
+## ⚠️ Corrections
 
-- [MCP Server Trigger — n8n Docs](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-langchain.mcptrigger) (bloque nginx oficial)
+Mistakes and false assumptions detected during this research. Read this before anything else:
+
+1. **"The n8n REST API can run workflows"** — ❌ **FALSE.** There's no `POST /workflows/{id}/run`
+   or equivalent. **Verified** against the official Workflow resource reference. Triggering is **only**
+   possible via webhook (or Schedule/another trigger). This assumption, widespread on blogs, would have
+   invalidated the whole design. **It's this document's most important finding.**
+
+2. **"SSE is deprecated in n8n's MCP Server Trigger"** — ⚠️ **NOT VERIFIED.** n8n's docs list
+   SSE and Streamable HTTP **without marking either as deprecated**. The only thing they say explicitly is that
+   it does *not* support stdio. SSE's deprecation is a trend in the wider MCP ecosystem, **not a fact
+   documented by n8n**. Don't repeat it as true.
+
+3. **"Enabling 'Websockets Support' in NPM fixes SSE"** — ❌ **FALSE and counterproductive.** That toggle
+   injects `Connection: upgrade`, while SSE requires `Connection: ''` (emptied). They're different
+   mechanisms. Enabling it makes the problem worse.
+
+4. **"With `proxy_buffering off` it's solved"** — ⚠️ **INCOMPLETE.** At least five more directives are
+   needed: `proxy_http_version 1.1`, `proxy_set_header Connection ''`, `gzip off`,
+   `chunked_transfer_encoding off` and long timeouts. The default timeouts (60 s) kill the connection
+   anyway even with buffering off — and the symptom is identical, which is extremely misleading.
+
+5. **`Unexpected token '<', "<!DOCTYPE "...` is NOT a buffering problem** — it's the missing
+   `Accept: application/json, text/event-stream` header. Chasing the nginx config for this error is a
+   guaranteed waste of hours.
+
+6. **"BullMQ already supports PostgreSQL"** — ⚠️ **NOT VERIFIED / CONTRADICTORY.** The repo's GitHub
+   description says *"based on Redis or PostgreSQL"*, but bullmq.io's official news page still
+   describes it as Redis-backed and **doesn't confirm** that backend. Check its documentation before
+   basing any decision on it.
+
+7. **"More stars = better choice"** — ❌ BullMQ has 2.4× pg-boss's stars and still **isn't**
+   the recommendation. The deciding criterion is transactional atomicity with the Postgres APM already uses,
+   not popularity. (Honesty note: the open-issues ratio also favors pg-boss,
+   but a bigger project naturally accumulates more issues — don't read it as BullMQ being abandoned;
+   it shipped a release the same day.)
+
+8. **`POST /workflows/{id}/activate` is DEPRECATED** — use `publish`/`unpublish`. Almost every 2025
+   tutorial uses the old ones. ⚠️ Check which your version accepts before wiring them.
+
+9. **A self-hosted n8n API key has NO scopes** — scopes are Enterprise-only. Your key will have
+   **full access**. Hence the recommendation not to point AI tools with write access at production.
+
+10. **⚠️ NOT VERIFIED — the `/mcp/` and `/mcp-test/` prefix.** Secondary sources agree and n8n's own
+    nginx example uses `location /mcp/`, but **the docs don't publish the literal URL template**.
+    Read it from the node's panel. Don't build it by hand.
+
+11. **⚠️ NOT VERIFIED — `proxy_pass http://n8n:5678`.** It only works if NPM and n8n share a Docker network.
+    Check with `docker network inspect` and adjust before pasting the block.
+
+12. **n8n's license isn't OSI open source** — the GitHub API reports it as "Other"
+    (Sustainable Use License). Irrelevant for internal use, but **relevant if you ever resell
+    the automation as part of a product.** Keep it in mind given a multi-tenant SaaS plan.
+
+---
+
+## Sources
+
+- [MCP Server Trigger — n8n Docs](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-langchain.mcptrigger) (official nginx block)
 - [MCP Client Tool — n8n Docs](https://docs.n8n.io/integrations/builtin/cluster-nodes/sub-nodes/n8n-nodes-langchain.toolmcp/)
 - [n8n API — Docs](https://docs.n8n.io/connect/n8n-api) · [Authentication](https://docs.n8n.io/connect/n8n-api/authentication) · [Endpoint reference](https://docs.n8n.io/connect/n8n-api/api-reference) · [Execution](https://docs.n8n.io/connect/n8n-api/execution) · [Workflow](https://docs.n8n.io/connect/n8n-api/workflow)
 - [Webhook node — n8n Docs](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.webhook)
@@ -654,4 +657,4 @@ Errores y suposiciones falsas detectadas durante esta investigación. Léelo ant
 - [Surviving SSE Behind Nginx Proxy Manager — Medium](https://medium.com/@dsherwin/surviving-sse-behind-nginx-proxy-manager-npm-a-real-world-deep-dive-69c5a6e8b8e5)
 - [czlonkowski/n8n-mcp](https://github.com/czlonkowski/n8n-mcp) · [timgit/pg-boss](https://github.com/timgit/pg-boss) · [taskforcesh/bullmq](https://github.com/taskforcesh/bullmq) · [graphile/worker](https://github.com/graphile/worker)
 - [BullMQ News](https://bullmq.io/news/)
-- Datos de estrellas/licencia/push: GitHub Search & Repos API, consultada 2026-08-02
+- Star/license/push data: GitHub Search & Repos API, checked 2026-08-02

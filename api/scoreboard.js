@@ -1,26 +1,26 @@
-/* Scoreboard semanal de ventas (EKER OS: "evaluar ventas según números, no emociones").
+/* Weekly sales scoreboard ("judge sales by the numbers, not by emotions").
 
-   Semanas ISO (lunes-domingo) en hora de Nueva York: una llamada del domingo a
-   las 23:30 es de esa semana aunque en UTC ya sea lunes. Las filas corregidas
-   (otra fila con corrects_id apuntándolas) no cuentan: si no, un botón mal
-   pulsado inflaría los "interesados" para siempre. */
+   ISO weeks (Monday-Sunday) in New York time: a call on Sunday at 23:30
+   belongs to that week even though it's already Monday in UTC. Corrected rows
+   (another row with corrects_id pointing at them) don't count: otherwise one
+   mis-tapped button would inflate "interested" forever. */
 
 import { zonedMidnight, partesLocales } from './tz.js';
 
 const ZONA = 'America/New_York';
 
-/** "2026-W39" para una fecha, contada en hora de NY. */
+/** "2026-W39" for a date, counted in NY time. */
 export function semanaIso(fecha = new Date()) {
   const { y, m, d } = partesLocales(fecha, ZONA);
   const dia = new Date(Date.UTC(y, m - 1, d));
   const dow = dia.getUTCDay() || 7;
-  dia.setUTCDate(dia.getUTCDate() + 4 - dow);             // jueves de esa semana
+  dia.setUTCDate(dia.getUTCDate() + 4 - dow);             // Thursday of that week
   const inicioAnio = new Date(Date.UTC(dia.getUTCFullYear(), 0, 1));
   const semana = Math.ceil(((dia - inicioAnio) / 86400000 + 1) / 7);
   return `${dia.getUTCFullYear()}-W${String(semana).padStart(2, '0')}`;
 }
 
-/** [desde, hasta) en UTC para una semana ISO en hora de NY. */
+/** [from, to) in UTC for an ISO week in NY time. */
 export function rangoSemana(iso) {
   const m = /^(\d{4})-W(\d{2})$/.exec(String(iso || ''));
   if (!m) return null;

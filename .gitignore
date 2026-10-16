@@ -1,39 +1,39 @@
-# Secretos y configuración local — nunca al repo
+# Secrets and local config — never in the repo
 #
-# Los patrones son AMPLIOS a propósito, y el motivo es una cicatriz real: el
-# 01/08/2026 se coló al repo de tu web principal un `api/.env.bak-2026-08-010343`
-# —el .env entero, con Stripe, Firebase y FLEET_CRED_KEY dentro— porque las
-# reglas cubrían solo los nombres exactos que alguien se había imaginado.
+# The patterns are BROAD on purpose, and the reason is a real scar: on
+# 01/08/2026 an `api/.env.bak-2026-08-010343` slipped into the your main website repo
+# — the whole .env, with Stripe, Firebase and FLEET_CRED_KEY inside — because
+# the rules only covered the exact names someone had imagined.
 #
-# Regla: cualquier cosa que EMPIECE por .env y no sea el ejemplo, fuera.
-# Desapuntar un falso positivo es trivial; despublicar una clave no.
+# Rule: anything that STARTS with .env and isn't the example stays out.
+# Un-ignoring a false positive is trivial; un-publishing a key is not.
 .env
 .env*
 api/.env
 api/.env*
 **/.env*
-# El ejemplo SÍ va al repo: solo nombres de variables, ningún valor.
+# The example DOES go in the repo: variable names only, no values.
 !.env.example
 !api/.env.example
 !**/.env.example
 
-# Claves del Admin SDK de Firebase — NUNCA al repo
+# Firebase Admin SDK keys — NEVER in the repo
 *service-account*.json
 *serviceAccount*.json
 sa-key*.json
 
-# Dependencias y artefactos de build
+# Dependencies and build artifacts
 node_modules/
 web/dist/
 
-# Sistema
+# System
 .DS_Store
 
-# Grafo de conocimiento de graphify — artefacto local
+# graphify knowledge graph — local artifact
 graphify-out/
 .graphify_*
 
-# Los spikes enlazan el node_modules de api/ en vez de duplicarlo.
-# El patron `node_modules/` de arriba no casa con un symlink.
+# The spikes symlink api/'s node_modules instead of duplicating it.
+# The `node_modules/` pattern above doesn't match a symlink.
 spike/*/node_modules
 .worktrees/

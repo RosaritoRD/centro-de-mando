@@ -1,52 +1,52 @@
-# Categoría B — Arquitecturas de referencia (mission control / orquestadores)
+# Category B — Reference architectures (mission control / orchestrators)
 
-**Fecha de investigación:** 2 de agosto de 2026
-**Pregunta que responde:** ¿cómo se estructura por dentro un "centro de mando" con agentes?
-¿Qué patrón de orquestación copiamos, cómo se persisten las ejecuciones, cómo se aprueban
-acciones sensibles y cómo se mide el coste — todo dentro de 2 núcleos y 4,6 GB libres?
+**Research date:** August 2, 2026
+**Question it answers:** how is an agent "command center" structured inside? Which
+orchestration pattern do we copy, how are runs persisted, how are sensitive actions
+approved and how is cost measured — all within 2 cores and 4.6 GB free?
 
-**Todo lo marcado con ✅ está verificado contra la API de GitHub, el registry de npm o la
-documentación oficial en esta fecha.** Lo marcado con ⚠️ NO VERIFICADO se señala explícitamente.
+**Everything marked ✅ is verified against the GitHub API, the npm registry or the official
+documentation on this date.** Anything ⚠️ NOT VERIFIED is flagged explicitly.
 
-Depende de: `G-infra-real.md` (restricciones del host), `A-agent-sdk.md` (runtime de agentes),
-`F-n8n-automatizaciones.md` (scheduler y SSE).
-
----
-
-## 0. Recomendación en una línea
-
-> **APM construye su propio control plane** (Node + Postgres + pg-boss, ya decidido en F),
-> aplica el patrón **orquestador-worker de Anthropic** *solo* cuando la tarea es paralelizable,
-> guarda cada ejecución como un **log de eventos append-only en Postgres** (factor 12), y
-> **descarta toda la capa de observabilidad enlatada** (Langfuse, Helicone, Phoenix) por coste
-> de RAM: el registro de coste vive en dos tablas nuestras con los nombres de atributo de
-> **OpenTelemetry GenAI semconv**, para poder exportar a un colector el día que haga falta.
-
-Lo que NO hay que construir: un framework de agentes (lo pone el Agent SDK), un motor de
-durabilidad (Postgres + pg-boss llegan de sobra a esta escala) y una UI de chat (assistant-ui, informe C).
+Depends on: `G-infra-real.md` (host constraints), `A-agent-sdk.md` (agent runtime),
+`F-n8n-automatizaciones.md` (scheduler and SSE).
 
 ---
 
-## 1. Tabla de fuentes verificadas
+## 0. One-line recommendation
 
-| Repo / fuente | ★ | Licencia | Último push | Qué aporta |
+> **APM builds its own control plane** (Node + Postgres + pg-boss, already decided in F),
+> applies Anthropic's **orchestrator-worker** pattern *only* when the task can be
+> parallelized, stores each run as an **append-only event log in Postgres** (factor 12), and
+> **rules out the whole canned observability layer** (Langfuse, Helicone, Phoenix) for RAM
+> cost: cost logging lives in two of our own tables using the **OpenTelemetry GenAI semconv**
+> attribute names, so it can be exported to a collector the day it's needed.
+
+What NOT to build: an agent framework (the Agent SDK provides it), a durability engine
+(Postgres + pg-boss are more than enough at this scale) and a chat UI (assistant-ui, report C).
+
+---
+
+## 1. Verified sources
+
+| Repo / source | ★ | License | Last push | What it brings |
 |---|---|---|---|---|
-| `anthropic.com/engineering/multi-agent-research-system` | — | artículo oficial | — | El patrón orquestador-worker con números reales ✅ |
-| `humanlayer/12-factor-agents` | **25.036** ✅ | NOASSERTION ⚠️ | **2025-09-21** (parado) ✅ | Los principios de control flow propio |
-| `builderz-labs/mission-control` | **5.902** ✅ | MIT ✅ | 2026-07-27 ✅ | Control plane self-hosted ya hecho (alpha) |
-| `dbos-inc/dbos-transact-ts` | 1.303 ✅ | MIT ✅ | 2026-07-30 ✅ | Durabilidad in-process sobre Postgres |
-| `langchain-ai/agent-inbox` | 1.041 ✅ | MIT ✅ | 2026-07-27 ✅ | UX de bandeja para aprobaciones |
-| `inngest/inngest` | 5.679 ✅ | NOASSERTION ⚠️ | 2026-08-02 ✅ | Durable execution como servicio |
-| `restatedev/restate` | 4.240 ✅ | NOASSERTION ⚠️ | 2026-08-02 ✅ | Durable execution ligero (Rust) |
-| `temporalio/sdk-typescript` | 890 ✅ | MIT ✅ | 2026-08-01 ✅ | Durabilidad de referencia a gran escala |
-| `langfuse/langfuse` | **32.349** ✅ | NOASSERTION ⚠️ | 2026-08-01 ✅ | Observabilidad LLM (pesada) |
-| `Arize-ai/phoenix` | 10.861 ✅ | NOASSERTION ⚠️ | 2026-08-02 ✅ | Observabilidad + evals |
-| `Helicone/helicone` | 6.028 ✅ | Apache-2.0 ✅ | 2026-07-25 ✅ | Gateway de coste — **ver §7, está muerto** |
-| `openlit/openlit` | 2.666 ✅ | Apache-2.0 ✅ | 2026-08-01 ✅ | Observabilidad OTel-nativa |
+| `anthropic.com/engineering/multi-agent-research-system` | — | official article | — | The orchestrator-worker pattern with real numbers ✅ |
+| `humanlayer/12-factor-agents` | **25,036** ✅ | NOASSERTION ⚠️ | **2025-09-21** (stalled) ✅ | The own-your-control-flow principles |
+| `builderz-labs/mission-control` | **5,902** ✅ | MIT ✅ | 2026-07-27 ✅ | A ready-made self-hosted control plane (alpha) |
+| `dbos-inc/dbos-transact-ts` | 1,303 ✅ | MIT ✅ | 2026-07-30 ✅ | In-process durability on Postgres |
+| `langchain-ai/agent-inbox` | 1,041 ✅ | MIT ✅ | 2026-07-27 ✅ | Inbox UX for approvals |
+| `inngest/inngest` | 5,679 ✅ | NOASSERTION ⚠️ | 2026-08-02 ✅ | Durable execution as a service |
+| `restatedev/restate` | 4,240 ✅ | NOASSERTION ⚠️ | 2026-08-02 ✅ | Lightweight durable execution (Rust) |
+| `temporalio/sdk-typescript` | 890 ✅ | MIT ✅ | 2026-08-01 ✅ | The reference for durability at scale |
+| `langfuse/langfuse` | **32,349** ✅ | NOASSERTION ⚠️ | 2026-08-01 ✅ | LLM observability (heavy) |
+| `Arize-ai/phoenix` | 10,861 ✅ | NOASSERTION ⚠️ | 2026-08-02 ✅ | Observability + evals |
+| `Helicone/helicone` | 6,028 ✅ | Apache-2.0 ✅ | 2026-07-25 ✅ | Cost gateway — **see §7, it's dead** |
+| `openlit/openlit` | 2,666 ✅ | Apache-2.0 ✅ | 2026-08-01 ✅ | OTel-native observability |
 
-Versiones npm consultadas el 2-ago-2026 contra `registry.npmjs.org` ✅:
+npm versions checked on 2-Aug-2026 against `registry.npmjs.org` ✅:
 
-| Paquete | Versión | Publicado | Licencia | Deps directas |
+| Package | Version | Published | License | Direct deps |
 |---|---|---|---|---|
 | `@anthropic-ai/claude-agent-sdk` | 0.3.220 | 2026-07-24 | SEE LICENSE IN README ⚠️ | **0** |
 | `pg-boss` | 12.26.4 | 2026-08-01 | MIT | **3** |
@@ -54,254 +54,249 @@ Versiones npm consultadas el 2-ago-2026 contra `registry.npmjs.org` ✅:
 
 ---
 
-## 2. El patrón de referencia: orquestador-worker (Anthropic)
+## 2. The reference pattern: orchestrator-worker (Anthropic)
 
-Es la arquitectura del sistema de Research de Anthropic, y la única publicada con números
-de producción. Resumen verificado del artículo oficial ✅:
+It's the architecture of Anthropic's Research system, and the only one published with
+production numbers. Verified summary of the official article ✅:
 
-- Un **agente líder** (Opus) analiza la petición, decide la estrategia y **lanza subagentes**
-  (Sonnet) que trabajan **en paralelo**.
-- Cada subagente recibe cuatro cosas obligatorias: **objetivo, formato de salida, guía de
-  herramientas/fuentes y límites explícitos de la tarea**. Instrucciones cortas del tipo
-  "investiga la escasez" producen trabajo duplicado entre subagentes.
-- **Regla de escalado embebida en el prompt del líder**: consulta simple → 1 agente y 3-10
-  llamadas; comparativa → 2-4 agentes con 10-15 llamadas cada uno; investigación compleja →
-  10+ agentes con responsabilidades repartidas.
-- El líder levanta **3-5 subagentes en paralelo**, y cada subagente usa **3+ herramientas en
-  paralelo**. Esto recortó hasta un **90 % el tiempo** de las consultas complejas.
-- **Memoria externa**: antes de llenar la ventana (200.000 tokens) el líder guarda el plan
-  fuera del contexto; las salidas grandes de los subagentes van a un almacén externo y al
-  coordinador solo vuelve una **referencia ligera**, no el contenido.
-- **Agente de citas** dedicado: un paso posterior que recorre el informe y ata cada
-  afirmación a su fuente. (Para APM esto se traduce en un subagente de verificación que ata
-  cada lead a la URL de donde salió.)
+- A **lead agent** (Opus) analyzes the request, decides the strategy and **launches
+  subagents** (Sonnet) that work **in parallel**.
+- Each subagent gets four mandatory things: **objective, output format, tool/source guidance
+  and explicit task boundaries**. Short instructions like "research the shortage" produce
+  duplicated work across subagents.
+- **A scaling rule embedded in the lead's prompt**: simple query → 1 agent and 3-10 calls;
+  comparison → 2-4 agents with 10-15 calls each; complex research → 10+ agents with split
+  responsibilities.
+- The lead spins up **3-5 subagents in parallel**, and each subagent uses **3+ tools in
+  parallel**. This cut **up to 90% of the time** on complex queries.
+- **External memory**: before filling the window (200,000 tokens) the lead saves the plan
+  outside the context; large subagent outputs go to an external store and only a
+  **lightweight reference** returns to the coordinator, not the content.
+- A dedicated **citations agent**: a later step that walks the report and ties each claim to
+  its source. (For APM this translates into a verification subagent that ties each lead to
+  the URL it came from.)
 
-### 2.1 El número que manda en el diseño: **15×**
+### 2.1 The number that drives the design: **15×**
 
-| Modo | Consumo de tokens |
+| Mode | Token usage |
 |---|---|
-| Chat normal | 1× |
-| Agente con herramientas | **~4×** |
-| Sistema multi-agente | **~15×** |
+| Normal chat | 1× |
+| Agent with tools | **~4×** |
+| Multi-agent system | **~15×** |
 
-Mejora medida: **+90,2 %** frente a un agente único en su evaluación interna de research. ✅
+Measured improvement: **+90.2%** over a single agent in their internal research eval. ✅
 
-**Lectura para APM (esto es opinión mía, no del artículo):** el multiplicador 15× es
-aceptable cuando el resultado se vende (una tanda de leads calificados) e inaceptable como
-modo por defecto de la caja de chat. El artículo dice explícitamente que el multi-agente
-**no compensa** cuando todos los agentes necesitan el mismo contexto, cuando hay muchas
-interdependencias, o cuando el valor no justifica el coste.
+**Reading for APM (my opinion, not the article's):** the 15× multiplier is acceptable when
+the result is sold (a batch of qualified leads) and unacceptable as the chat box's default
+mode. The article says explicitly that multi-agent **doesn't pay off** when every agent needs
+the same context, when there are many interdependencies, or when the value doesn't justify
+the cost.
 
-→ **Decisión de diseño:** APM arranca **single-agent con herramientas** para todo, y el modo
-orquestador se activa **solo** en tareas explícitamente paralelizables (barrido de leads en
-N zonas, teardown de N competidores). El propio orquestador debe llevar un tope de
-subagentes y de coste por ejecución (§5.3).
+→ **Design decision:** APM starts **single-agent with tools** for everything, and orchestrator
+mode is enabled **only** for explicitly parallelizable tasks (lead sweep across N areas,
+teardown of N competitors). The orchestrator itself must carry a cap on subagents and on
+cost per run (§5.3).
 
-### 2.2 Lo que el artículo avisa sobre producción
+### 2.2 What the article warns about production
 
-- Los agentes son **con estado**: un fallo pequeño no se queda pequeño, muta el comportamiento.
-- Hay que poder **reanudar desde el punto del error**, no reiniciar (caro y frustrante).
-- Son **no deterministas** con el mismo prompt → sin trazas completas, depurar es imposible.
-- **Rainbow deployments**: al desplegar, conviven versiones vieja y nueva para no cortar
-  ejecuciones a medias. ⚠️ Para APM esto es exagerado hoy, pero implica una regla barata:
-  **antes de `docker compose up --build`, no debe haber ejecuciones vivas** (o se marcan
-  como interrumpidas y se reanudan). Esto va al runbook de despliegue.
-
----
-
-## 3. Los 12 factores, filtrados a lo que nos aplica
-
-`humanlayer/12-factor-agents` (25.036 ★) es la referencia más citada del sector, pero
-⚠️ **su último push es de septiembre de 2025**: es un documento de principios, no una
-dependencia. Los tres que cambian el diseño de APM:
-
-1. **Factor 8 — dueño de tu control flow.** El bucle `while` es nuestro: nosotros decidimos
-   cuándo reintenta, cuándo pausa, cuándo para. El modelo elige la *siguiente acción*, no el
-   ciclo de vida. En la práctica: topes de iteración, de coste y de tiempo **en nuestro
-   código**, nunca "confiando" en que el prompt lo respete.
-2. **Factor 12 — el agente como reductor sin estado**: `f(eventos) -> siguiente acción`.
-   El estado de verdad es el **log de eventos**, no la memoria del proceso. Esto es lo que
-   nos permite reiniciar el contenedor sin perder nada.
-3. **Contactar humanos es una herramienta más**, no un caso especial del framework.
-   Encaja exactamente con `canUseTool` + `defer` del Agent SDK (informe A §6).
-
-Es coherente con lo que ya elegimos en A y C. No aporta código; aporta la disciplina de
-**no delegar en un framework lo que es negocio nuestro**.
+- Agents are **stateful**: a small failure doesn't stay small, it mutates the behavior.
+- You must be able to **resume from the point of failure**, not restart (expensive and
+  frustrating).
+- They're **non-deterministic** with the same prompt → without full traces, debugging is
+  impossible.
+- **Rainbow deployments**: when deploying, old and new versions coexist so half-finished runs
+  aren't cut off. ⚠️ For APM this is overkill today, but it implies a cheap rule: **before
+  `docker compose up --build`, there must be no live runs** (or they're marked interrupted
+  and resumed). This goes into the deployment runbook.
 
 ---
 
-## 4. ¿Y si adoptamos un control plane ya hecho? (build vs adopt honesto)
+## 3. The 12 factors, filtered to what applies to us
 
-`builderz-labs/mission-control` — 5.902 ★, MIT, push 2026-07-27 ✅ — es literalmente
-"control plane self-hosted para agentes: despachar tareas, revisar ejecuciones, controlar
-gasto, operar Claude Code / Codex". Es la opción de "no construyas nada".
+`humanlayer/12-factor-agents` (25,036 ★) is the industry's most cited reference, but
+⚠️ **its last push was in September 2025**: it's a principles document, not a dependency.
+The three that change APM's design:
 
-**A favor:** 32 paneles (tareas, agentes, skills, logs, memoria, seguridad, cron, alertas,
-webhooks, pipelines), SQLite en WAL sin Postgres ni Redis, roles multi-usuario, agregación
-de coste, aprobaciones, adaptadores para Claude Code/Codex/CrewAI/LangGraph, Docker.
+1. **Factor 8 — own your control flow.** The `while` loop is ours: we decide when it retries,
+   when it pauses, when it stops. The model picks the *next action*, not the lifecycle. In
+   practice: iteration, cost and time caps **in our code**, never "trusting" the prompt to
+   respect them.
+2. **Factor 12 — the agent as a stateless reducer**: `f(events) -> next action`. The source
+   of truth is the **event log**, not process memory. That's what lets us restart the
+   container without losing anything.
+3. **Contacting humans is just another tool**, not a special case of the framework. It fits
+   exactly with the Agent SDK's `canUseTool` + `defer` (report A §6).
 
-**En contra — y por esto lo descarto:**
-
-1. **Es un control plane *sobre* runtimes, no un runtime.** No ejecuta agentes: los agentes
-   se registran, reclaman tareas de una cola y devuelven resultados ✅. APM necesita lo
-   contrario: el agente corre **dentro** de nuestro backend con nuestras herramientas
-   (leads, correo, n8n, la BD de tu empresa).
-2. **Alpha declarada por los propios autores**: "APIs, esquemas y configuración pueden
-   cambiar entre releases", y avisan de que **el control de acceso está incompleto** antes
-   de exponerlo en red ✅. Sería la pieza más expuesta de la VPS.
-3. **Ni una sola de las funciones de negocio de APM está ahí**: leads, bandeja de correo
-   unificada, áreas, websites. Terminaríamos manteniendo su modelo de datos *y* el nuestro.
-4. **Next.js 16 + pnpm + Node 22** ✅ = estrenar en la VPS un stack de build que hoy no existe
-   (ver G.8), para un producto que no es el nuestro.
-
-**Lo que sí robamos de ellos, gratis:** su taxonomía de paneles. Tasks / agents / runs /
-schedules / alerts / webhooks / API keys / audit trail / cost views es exactamente el
-inventario de pantallas que APM va a necesitar. Sirve de checklist, no de dependencia.
-
-**Veredicto:** construir. Pero con una condición honesta — si dentro de tres meses APM se
-ha convertido en "una cola de tareas con paneles", entonces me equivoqué y esto se revisa.
+It's consistent with what we already chose in A and C. It brings no code; it brings the
+discipline of **not delegating to a framework what is our own business**.
 
 ---
 
-## 5. Durabilidad: qué pasa cuando el contenedor se reinicia a mitad de una ejecución
+## 4. What if we adopt a ready-made control plane? (honest build vs adopt)
 
-Este es el punto donde casi todos los proyectos de agentes se rompen. Cuatro niveles:
+`builderz-labs/mission-control` — 5,902 ★, MIT, push 2026-07-27 ✅ — is literally a
+"self-hosted control plane for agents: dispatch tasks, review runs, control spend, operate
+Claude Code / Codex". It's the "build nothing" option.
 
-| Nivel | Qué sobrevive | Coste operativo | Veredicto para APM |
+**For:** 32 panels (tasks, agents, skills, logs, memory, security, cron, alerts, webhooks,
+pipelines), SQLite in WAL with no Postgres or Redis, multi-user roles, cost aggregation,
+approvals, adapters for Claude Code/Codex/CrewAI/LangGraph, Docker.
+
+**Against — and why I rule it out:**
+
+1. **It's a control plane *over* runtimes, not a runtime.** It doesn't run agents: agents
+   register, claim tasks from a queue and return results ✅. APM needs the opposite: the agent
+   runs **inside** our backend with our tools (leads, email, n8n, the company DB).
+2. **Alpha, as declared by its own authors**: "APIs, schemas and configuration may change
+   between releases", and they warn that **access control is incomplete** before exposing it
+   to a network ✅. It would be the most exposed piece on the VPS.
+3. **Not a single one of APM's business features is there**: leads, unified email inbox,
+   areas, websites. We'd end up maintaining their data model *and* ours.
+4. **Next.js 16 + pnpm + Node 22** ✅ = debuting a build stack on the VPS that doesn't exist
+   today (see G.8), for a product that isn't ours.
+
+**What we do steal from them, for free:** their panel taxonomy. Tasks / agents / runs /
+schedules / alerts / webhooks / API keys / audit trail / cost views is exactly the screen
+inventory APM will need. It's a checklist, not a dependency.
+
+**Verdict:** build. But with an honest condition — if three months from now APM has turned
+into "a task queue with panels", then I was wrong and this gets revisited.
+
+---
+
+## 5. Durability: what happens when the container restarts mid-run
+
+This is where almost every agent project breaks. Four levels:
+
+| Level | What survives | Operational cost | Verdict for APM |
 |---|---|---|---|
-| **0 — nada** | El proceso muere, la ejecución se pierde | 0 | ❌ Inaceptable: hay aprobaciones que esperan horas |
-| **1 — Postgres a mano** (log de eventos + `pg-boss` reintentando el job) | Ejecuciones, aprobaciones pendientes, coste | Casi 0 (Postgres y pg-boss ya están) | ✅ **Recomendado** |
-| **2 — DBOS Transact** (durabilidad in-process sobre el mismo Postgres) | Además: el punto exacto del código donde se murió | Bajo: es **una librería**, no infraestructura ✅ | 🔶 Camino de ampliación |
-| **3 — Temporal / Restate / Inngest** (servidor aparte) | Todo, a escala de miles de workflows | **Alto: proceso(s) nuevos + su propia BD** | ❌ Descartado (RAM) |
+| **0 — nothing** | The process dies, the run is lost | 0 | ❌ Unacceptable: some approvals wait for hours |
+| **1 — hand-rolled Postgres** (event log + `pg-boss` retrying the job) | Runs, pending approvals, cost | Almost 0 (Postgres and pg-boss are already there) | ✅ **Recommended** |
+| **2 — DBOS Transact** (in-process durability on the same Postgres) | Also: the exact point in the code where it died | Low: it's **a library**, not infrastructure ✅ | 🔶 Expansion path |
+| **3 — Temporal / Restate / Inngest** (separate server) | Everything, at the scale of thousands of workflows | **High: new process(es) + their own DB** | ❌ Ruled out (RAM) |
 
-### 5.1 Por qué el nivel 3 está descartado aquí
+### 5.1 Why level 3 is ruled out here
 
-Temporal, Restate e Inngest son excelentes y están muy vivos ✅ (push del 1-2 ago 2026),
-pero los tres significan **servidor de orquestación aparte** en una VPS con 4,6 GB libres,
-2 núcleos y 1 GB de swap ya en uso (G.1). Con el Agent SDK pidiendo ~1 GiB por agente como
-**suelo** (informe A), gastar cientos de MB en un motor de workflows para un producto de
-**un solo usuario** es una mala asignación de recursos. Se revisa si algún día APM ejecuta
-workflows de varios pasos para clientes externos.
+Temporal, Restate and Inngest are excellent and very much alive ✅ (pushes on 1-2 Aug 2026),
+but all three mean **a separate orchestration server** on a VPS with 4.6 GB free, 2 cores
+and 1 GB of swap already in use (G.1). With the Agent SDK asking for ~1 GiB per agent as a
+**floor** (report A), spending hundreds of MB on a workflow engine for a **single-user**
+product is a poor allocation of resources. It gets revisited if APM ever runs multi-step
+workflows for external customers.
 
-### 5.2 DBOS como camino de ampliación (no ahora)
+### 5.2 DBOS as an expansion path (not now)
 
-`@dbos-inc/dbos-sdk` 4.25.14, MIT, **6 dependencias directas** ✅ — corre **dentro** del
-proceso Node y guarda el estado de ejecución en **el Postgres que ya tenemos**. Es la única
-opción de nivel 3 sin infraestructura nueva. ⚠️ NO VERIFICADO: no he leído su documentación
-ni probado su convivencia con `pg-boss` en la misma BD, ni su comportamiento con procesos
-de larga duración que esperan aprobación humana. **Anotado como spike futuro, no como
-decisión.**
+`@dbos-inc/dbos-sdk` 4.25.14, MIT, **6 direct dependencies** ✅ — runs **inside** the Node
+process and stores execution state in **the Postgres we already have**. It's the only
+level-3-style option with no new infrastructure. ⚠️ NOT VERIFIED: I haven't read its docs or
+tested its coexistence with `pg-boss` in the same DB, nor its behavior with long-running
+processes waiting for human approval. **Noted as a future spike, not a decision.**
 
-### 5.3 Lo que sí hacemos en Fase 2 (nivel 1, concreto)
+### 5.3 What we do in Phase 2 (level 1, concretely)
 
 ```
-run                     ← una ejecución de agente (estado: queued|running|awaiting_approval|done|failed|cancelled)
-run_event               ← log append-only: cada mensaje, tool_use, tool_result, error
-run_cost                ← tokens y dólares por turno (ver §7)
-approval                ← petición pendiente, con TTL y el requestId del SDK
+run                     ← an agent run (status: queued|running|awaiting_approval|done|failed|cancelled)
+run_event               ← append-only log: every message, tool_use, tool_result, error
+run_cost                ← tokens and dollars per turn (see §7)
+approval                ← pending request, with a TTL and the SDK's requestId
 ```
 
-Reglas que se derivan de A + B, y que evitan los tres fallos clásicos:
+Rules derived from A + B, which avoid the three classic failures:
 
-- El log de eventos es **append-only**. Reconstruir el estado = releer eventos (factor 12).
-- Cada `run` lleva **tope de coste, tope de iteraciones y `deadline`**. Al superarlos, para
-  el bucle **nuestro código**, no el prompt.
-- Al arrancar el proceso: todo `run` en `running` sin worker vivo pasa a `interrupted` y se
-  reencola (esto es la versión barata del "rainbow deploy" de §2.2).
-- Las aprobaciones sobreviven al reinicio porque viven en Postgres, no en memoria. ⚠️ El
-  punto frágil sigue siendo el que ya identificó el informe A (riesgo 7): si el transcript
-  del SDK está en disco local, el `defer` puede no sobrevivir. **Ese spike sigue siendo el
-  primer trabajo técnico de la Fase 2.**
-
----
-
-## 6. Aprobación humana: el patrón "bandeja", no el patrón "popup"
-
-`langchain-ai/agent-inbox` (1.041 ★, MIT, push 2026-07-27 ✅) formaliza una idea que APM
-debería copiar tal cual, **sin usar la librería** (es para LangGraph):
-
-> Las aprobaciones no son diálogos modales dentro del chat. Son una **bandeja de entrada**
-> con su propia URL, donde se acumulan las acciones que el agente quiere ejecutar y que
-> esperan un humano.
-
-El motivo es operativo, no estético: si la aprobación vive dentro de la sesión de chat,
-cerrar la pestaña mata la acción. En bandeja, el agente puede pedir permiso el martes y
-el dueño aprobarlo el miércoles desde el móvil.
-
-En LangGraph el mecanismo es `interrupt` + checkpointer persistente (`AsyncPostgresSaver`) ✅.
-En APM el equivalente exacto ya lo tenemos: **`canUseTool` + `defer` + fila en `approval`**
-(informe A §6). Misma semántica, sin adoptar LangGraph.
-
-**Regla dura, ya acordada en el brief:** ninguna acción destructiva o de envío al exterior
-(correo, WhatsApp, borrado, gasto) se ejecuta sin fila aprobada. La aprobación se verifica
-en el **servidor**; nunca se confía en que el prompt "recuerde" pedir permiso.
+- The event log is **append-only**. Rebuilding state = replaying events (factor 12).
+- Each `run` carries a **cost cap, an iteration cap and a `deadline`**. When exceeded, **our
+  code** stops the loop, not the prompt.
+- On process startup: every `run` in `running` with no live worker becomes `interrupted` and
+  is requeued (this is the cheap version of §2.2's "rainbow deploy").
+- Approvals survive the restart because they live in Postgres, not in memory. ⚠️ The fragile
+  point is still the one report A identified (risk 7): if the SDK transcript is on local
+  disk, the `defer` might not survive. **That spike is still the first technical task of
+  Phase 2.** (Resolved later: SPIKE-01 and SPIKE-02.)
 
 ---
 
-## 7. Observabilidad y coste: por qué NO instalamos una plataforma
+## 6. Human approval: the "inbox" pattern, not the "popup" pattern
 
-Es la sección con la conclusión más contraintuitiva del informe.
+`langchain-ai/agent-inbox` (1,041 ★, MIT, push 2026-07-27 ✅) formalizes an idea APM should
+copy as-is, **without using the library** (it's for LangGraph):
 
-| Opción | ★ | Estado | Por qué no |
+> Approvals aren't modal dialogs inside the chat. They're an **inbox** with its own URL,
+> where the actions the agent wants to run pile up waiting for a human.
+
+The reason is operational, not aesthetic: if the approval lives inside the chat session,
+closing the tab kills the action. In an inbox, the agent can ask for permission on Tuesday
+and the owner can approve it on Wednesday from a phone.
+
+In LangGraph the mechanism is `interrupt` + a persistent checkpointer
+(`AsyncPostgresSaver`) ✅. In APM we already have the exact equivalent: **`canUseTool` +
+`defer` + a row in `approval`** (report A §6). Same semantics, without adopting LangGraph.
+
+**Hard rule, already agreed in the brief:** no destructive or outbound action (email,
+WhatsApp, deletion, spending) runs without an approved row. Approval is checked on the
+**server**; we never trust the prompt to "remember" to ask for permission.
+
+---
+
+## 7. Observability and cost: why we do NOT install a platform
+
+This is the section with the report's most counter-intuitive conclusion.
+
+| Option | ★ | Status | Why not |
 |---|---|---|---|
-| **Langfuse** | 32.349 ✅ | Vivo, es el estándar de facto | Exige **Postgres + ClickHouse + Redis + S3** además de web y worker ✅. Su propia doc recomienda "al menos 2 CPU y 4 GB **para los contenedores de aplicación**" ✅ — es decir, sin contar ClickHouse. **Eso es toda la RAM libre de la VPS para mirar gráficos.** ❌ |
-| **Helicone** | 6.028 ✅ | ⚠️ **Adquirido por Mintlify (mar-2026); desarrollo detenido**, solo parches de seguridad (según búsqueda, NO verificado en fuente oficial) | Construir sobre algo sin roadmap ❌ |
-| **Phoenix (Arize)** | 10.861 ✅ | Muy vivo (push 2026-08-02) | Orientado a evaluación/experimentación; otro servicio más en la VPS 🔶 |
-| **OpenLIT** | 2.666 ✅ | Vivo, nativo OTel | Sigue siendo un stack de observabilidad completo 🔶 |
-| **Tablas propias + semconv de OTel** | — | — | ✅ **Elegido** |
+| **Langfuse** | 32,349 ✅ | Alive, the de facto standard | Requires **Postgres + ClickHouse + Redis + S3** besides web and worker ✅. Its own docs recommend "at least 2 CPU and 4 GB **for the application containers**" ✅ — that is, not counting ClickHouse. **That's all the VPS's free RAM just to look at charts.** ❌ |
+| **Helicone** | 6,028 ✅ | ⚠️ **Acquired by Mintlify (Mar-2026); development stopped**, security patches only (per search results, NOT verified at an official source) | Building on something with no roadmap ❌ |
+| **Phoenix (Arize)** | 10,861 ✅ | Very alive (push 2026-08-02) | Geared to evaluation/experimentation; one more service on the VPS 🔶 |
+| **OpenLIT** | 2,666 ✅ | Alive, OTel-native | Still a full observability stack 🔶 |
+| **Our own tables + OTel semconv** | — | — | ✅ **Chosen** |
 
-### 7.1 El estándar que sí adoptamos (gratis)
+### 7.1 The standard we do adopt (for free)
 
-Las **GenAI semantic conventions de OpenTelemetry** definen los nombres canónicos:
-spans `invoke_agent`, `chat`, `execute_tool`, atributos `gen_ai.request.model`,
-`gen_ai.usage.input_tokens` (según búsqueda ✅). Estado: ⚠️ los spans de *cliente* salieron
-de experimental a principios de 2026, pero **agentes y frameworks siguen siendo
-experimentales**; en junio de 2026 (v1.42.0) los atributos `gen_ai.*` se movieron a un repo
-propio — cambio organizativo, **no** graduación a estable. ⚠️ NO VERIFICADO contra la spec
-oficial; viene de resultados de búsqueda.
+OpenTelemetry's **GenAI semantic conventions** define the canonical names: spans
+`invoke_agent`, `chat`, `execute_tool`, attributes `gen_ai.request.model`,
+`gen_ai.usage.input_tokens` (per search ✅). Status: ⚠️ *client* spans left experimental in
+early 2026, but **agents and frameworks are still experimental**; in June 2026 (v1.42.0) the
+`gen_ai.*` attributes moved to their own repo — an organizational change, **not** a
+graduation to stable. ⚠️ NOT VERIFIED against the official spec; it comes from search results.
 
-**Consecuencia práctica y barata:** las columnas de nuestras tablas se llaman igual que los
-atributos de la convención (`model`, `input_tokens`, `output_tokens`,
-`cache_read_input_tokens`, `cache_creation_input_tokens`, `operation_name`). Coste hoy: cero.
-Beneficio el día que queramos exportar a un colector: un `SELECT` en vez de una migración.
+**Cheap practical consequence:** our table columns are named like the convention's attributes
+(`model`, `input_tokens`, `output_tokens`, `cache_read_input_tokens`,
+`cache_creation_input_tokens`, `operation_name`). Cost today: zero. Benefit the day we want
+to export to a collector: a `SELECT` instead of a migration.
 
-### 7.2 Qué medimos desde el día uno
+### 7.2 What we measure from day one
 
-El SDK ya devuelve el uso por turno (informe A §9). APM solo tiene que **persistirlo y
-sumarlo**:
+The SDK already returns per-turn usage (report A §9). APM only has to **persist and sum it**:
 
-- Por `run`: tokens de entrada/salida, tokens de caché leídos y creados, coste en dólares,
-  duración, nº de llamadas a herramientas, nº de subagentes.
-- Por día y por área (marketing, ventas, infra…), para el **panel de presupuesto de tokens**
-  que ya está en el PLAN (Fase 2).
-- **Tope duro**: al superar el presupuesto diario, el orquestador se niega a lanzar
-  subagentes nuevos. Con el multiplicador 15× de §2.1, esto no es una métrica bonita: es
-  el freno de mano.
+- Per `run`: input/output tokens, cache tokens read and created, cost in dollars, duration,
+  number of tool calls, number of subagents.
+- Per day and per area (marketing, sales, infra…), for the **token budget panel** already in
+  the PLAN (Phase 2).
+- **Hard cap**: past the daily budget, the orchestrator refuses to launch new subagents. With
+  §2.1's 15× multiplier, this isn't a pretty metric: it's the handbrake.
 
-⚠️ Los precios por millón de tokens de cada modelo **no se hardcodean en el código**: van en
-una tabla de configuración, porque cambian. (Los IDs de modelo exactos siguen pendientes de
-confirmar, riesgo 2 del informe A.)
+⚠️ Per-million-token prices for each model **aren't hard-coded**: they go in a config table,
+because they change. (Exact model IDs were still pending confirmation, risk 2 in report A.)
 
 ---
 
-## 8. Arquitectura resultante para APM
+## 8. The resulting architecture for APM
 
 ```mermaid
 flowchart TB
-    subgraph nav["Navegador — apm.tu-dominio.com"]
-        UI["assistant-ui (informe C)<br/>chat + bandeja de aprobaciones"]
+    subgraph nav["Browser — apm.your-domain.com"]
+        UI["assistant-ui (report C)<br/>chat + approvals inbox"]
     end
 
-    subgraph apm["Contenedor apm-api (Node)"]
-        HTTP["API HTTP + SSE"]
-        LOOP["Control flow PROPIO<br/>topes de coste / iteración / deadline"]
-        ORCH["Orquestador (Agent SDK)<br/>solo si la tarea es paralelizable"]
-        SUB["Subagentes: leads · correo · infra · contenido"]
-        TOOLS["Herramientas in-process<br/>createSdkMcpServer (informe A §8)"]
-        BOSS["pg-boss — cron y reintentos (informe F)"]
+    subgraph apm["apm-api container (Node)"]
+        HTTP["HTTP API + SSE"]
+        LOOP["OUR OWN control flow<br/>cost / iteration / deadline caps"]
+        ORCH["Orchestrator (Agent SDK)<br/>only if the task is parallelizable"]
+        SUB["Subagents: leads · email · infra · content"]
+        TOOLS["In-process tools<br/>createSdkMcpServer (report A §8)"]
+        BOSS["pg-boss — cron and retries (report F)"]
     end
 
-    subgraph pg["n8n_postgres — BD apm"]
+    subgraph pg["n8n_postgres — apm DB"]
         T1["run · run_event (append-only)"]
         T2["approval"]
         T3["run_cost"]
@@ -309,87 +304,86 @@ flowchart TB
     end
 
     N8N["n8n (webhooks)"]
-    API["API de Anthropic"]
+    API["Anthropic API"]
 
-    UI -->|"cookie __session"| HTTP
+    UI -->|"__session cookie"| HTTP
     HTTP --> LOOP --> ORCH --> SUB --> TOOLS
     ORCH --> API
     LOOP --> T1
     LOOP -->|canUseTool + defer| T2
-    T2 -->|"aprobado ⇒ reanudar"| LOOP
+    T2 -->|"approved ⇒ resume"| LOOP
     ORCH --> T3
     TOOLS --> T4
     TOOLS --> N8N
     BOSS --> LOOP
-    HTTP -.->|"SSE sin buffering"| UI
+    HTTP -.->|"SSE without buffering"| UI
 ```
 
-**Presupuesto de RAM (estimación, ⚠️ a medir en el spike):**
+**RAM budget (estimate, ⚠️ to be measured in the spike):**
 
-| Componente | Estimado |
+| Component | Estimate |
 |---|---|
-| `apm-api` en reposo (Node + Express + pg) | ~150-250 MB |
-| Cada agente activo del SDK | **~1 GiB (suelo oficial, informe A)** |
-| pg-boss | despreciable (usa el Postgres existente) |
-| BD `apm` | despreciable al principio |
-| **Total con 1 agente trabajando** | **~1,2 GB de los 4,6 GB libres** |
+| `apm-api` at rest (Node + Express + pg) | ~150-250 MB |
+| Each active SDK agent | **~1 GiB (official floor, report A)** |
+| pg-boss | negligible (uses the existing Postgres) |
+| `apm` DB | negligible at first |
+| **Total with 1 agent working** | **~1.2 GB of the 4.6 GB free** |
 
-→ **Límite operativo derivado: 2 ejecuciones concurrentes como máximo**, con cola para el
-resto. Con 3 agentes simultáneos entramos en swap, y la VPS ya tiene 1 GB de swap en uso.
-Esto no es una recomendación: es una constante de configuración (`MAX_CONCURRENT_RUNS=2`)
-que debe existir en el código desde el primer día.
-
----
-
-## 9. ⚠️ Correcciones a supuestos previos
-
-1. **"Multi-agente es mejor" — falso como regla general.** El propio artículo de Anthropic
-   dice que el multi-agente no compensa cuando hay mucha interdependencia o contexto
-   compartido, y que la mayoría de tareas de *código* tienen menos paralelismo real del que
-   parece. APM debe ser single-agent por defecto.
-2. **"Necesitamos Langfuse para ver el coste" — falso.** El Agent SDK ya devuelve el uso por
-   turno; lo que falta es una tabla, no una plataforma. Langfuse costaría más RAM que el
-   propio producto.
-3. **"Durabilidad = Temporal" — falso a nuestra escala.** Para un solo usuario, un log de
-   eventos en Postgres más los reintentos de pg-boss cubren el requisito real
-   ("que un reinicio no pierda una aprobación pendiente").
-4. **Helicone ya no es candidato** — ⚠️ adquirido y sin roadmap según la búsqueda; no
-   verificado en fuente oficial, pero suficiente para no apostar por él.
+→ **Derived operational limit: at most 2 concurrent runs**, with a queue for the rest. With 3
+simultaneous agents we hit swap, and the VPS already has 1 GB of swap in use. This isn't a
+recommendation: it's a config constant (`MAX_CONCURRENT_RUNS=2`) that must exist in the code
+from day one.
 
 ---
 
-## 10. Riesgos e incógnitas (NO VERIFICADO)
+## 9. ⚠️ Corrections to earlier assumptions
 
-1. **⚠️ El spike de `SessionStore` + `defer` sigue sin hacerse** (riesgo 7 del informe A).
-   Toda la arquitectura de aprobaciones de §5 y §6 depende de que una llamada diferida
-   sobreviva al reinicio del contenedor. **Es el primer trabajo técnico de la Fase 2.**
-2. **⚠️ Los ~1 GiB por agente son un suelo oficial, no una medición nuestra.** El límite de
-   2 ejecuciones concurrentes puede quedarse en 1, o subir a 3. Hay que medirlo antes de
-   prometer nada.
-3. **⚠️ DBOS + pg-boss en la misma BD**: no verificado que convivan sin pelearse por
-   esquemas o conexiones.
-4. **⚠️ Estado real de la semconv GenAI de OTel**: tomado de resultados de búsqueda, no de
-   la especificación. Solo afecta a nombres de columna, riesgo bajo.
-5. **⚠️ Helicone/Mintlify**: adquisición no verificada en fuente primaria.
-6. **⚠️ Requisitos de ClickHouse para Langfuse**: la cifra de "16 GiB recomendados" viene de
-   búsqueda, no de la doc oficial. La cifra que **sí** está verificada en la doc de Langfuse
-   es "al menos 2 CPU y 4 GB para los contenedores de aplicación" ✅ — y ya es suficiente
-   para descartarlo.
-7. **No he leído** la documentación de Inngest, Restate ni Temporal en profundidad: se
-   descartan por **modelo de despliegue** (servidor aparte en una VPS llena), no por calidad.
+1. **"Multi-agent is better" — false as a general rule.** Anthropic's own article says
+   multi-agent doesn't pay off with heavy interdependence or shared context, and that most
+   *coding* tasks have less real parallelism than it seems. APM should be single-agent by
+   default.
+2. **"We need Langfuse to see the cost" — false.** The Agent SDK already returns per-turn
+   usage; what's missing is a table, not a platform. Langfuse would cost more RAM than the
+   product itself.
+3. **"Durability = Temporal" — false at our scale.** For a single user, an event log in
+   Postgres plus pg-boss retries cover the real requirement ("a restart must not lose a
+   pending approval").
+4. **Helicone is no longer a candidate** — ⚠️ acquired and without a roadmap according to
+   search; not verified at an official source, but enough not to bet on it.
 
 ---
 
-## Fuentes
+## 10. Risks and unknowns (NOT VERIFIED)
+
+1. **⚠️ The `SessionStore` + `defer` spike still hadn't been done** (risk 7 in report A). The
+   whole approval architecture in §5 and §6 depends on a deferred call surviving a container
+   restart. **It's the first technical task of Phase 2.**
+2. **⚠️ The ~1 GiB per agent is an official floor, not our own measurement.** The limit of 2
+   concurrent runs may end up at 1, or go up to 3. It must be measured before promising anything.
+3. **⚠️ DBOS + pg-boss in the same DB**: not verified that they coexist without fighting over
+   schemas or connections.
+4. **⚠️ The real status of the OTel GenAI semconv**: taken from search results, not from the
+   spec. It only affects column names, low risk.
+5. **⚠️ Helicone/Mintlify**: acquisition not verified at a primary source.
+6. **⚠️ ClickHouse requirements for Langfuse**: the "16 GiB recommended" figure comes from
+   search, not the official docs. The figure that **is** verified in Langfuse's docs is "at
+   least 2 CPU and 4 GB for the application containers" ✅ — and that's already enough to
+   rule it out.
+7. **I haven't read** the Inngest, Restate or Temporal docs in depth: they're ruled out for
+   their **deployment model** (a separate server on a full VPS), not for quality.
+
+---
+
+## Sources
 
 - [Anthropic — How we built our multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system)
 - [Claude — When to use multi-agent systems (and when not to)](https://claude.com/blog/building-multi-agent-systems-when-and-how-to-use-them)
 - [humanlayer/12-factor-agents](https://github.com/humanlayer/12-factor-agents) · [12 Factor Agents — HumanLayer blog](https://www.humanlayer.dev/blog/12-factor-agents)
-- [builderz-labs/mission-control](https://github.com/builderz-labs/mission-control) (README y API de GitHub)
+- [builderz-labs/mission-control](https://github.com/builderz-labs/mission-control) (README and GitHub API)
 - [langchain-ai/agent-inbox](https://github.com/langchain-ai/agent-inbox) · [LangChain — Human-in-the-loop](https://docs.langchain.com/oss/python/langchain/human-in-the-loop)
 - [DBOS Transact](https://www.dbos.dev/dbos-transact) · [dbos-inc/dbos-transact-ts](https://github.com/dbos-inc/dbos-transact-ts)
 - [Langfuse — Application containers (self-hosted)](https://langfuse.com/self-hosting/deployment/infrastructure/containers) · [Scaling Langfuse](https://langfuse.com/self-hosting/configuration/scaling)
 - [Helicone — Cost tracking](https://docs.helicone.ai/guides/cookbooks/cost-tracking) · [Helicone/helicone](https://github.com/helicone/helicone)
 - [OpenTelemetry for AI Systems (Uptrace)](https://uptrace.dev/blog/opentelemetry-ai-systems) · [GenAI semconv cheat sheet](https://techbytes.app/posts/opentelemetry-genai-agent-semconv-cheat-sheet-2026/)
 - [Inngest — Durable execution for AI agents](https://www.inngest.com/blog/durable-execution-key-to-harnessing-ai-agents) · [Temporal vs Inngest (2026)](https://wetheflywheel.com/en/comparisons/temporal-vs-inngest/)
-- API de GitHub y registry de npm (estrellas, licencias, fechas, versiones) — consultadas el 2-ago-2026
+- GitHub API and npm registry (stars, licenses, dates, versions) — checked on 2-Aug-2026

@@ -1,17 +1,32 @@
-/* Desde dónde consulto y dónde busco los leads.
+/* Where I'm asking from and where I search for leads.
 
-   Son DOS sitios y no uno. Se vive en un lado y se vende en otro, y meterlos
-   en un solo campo obliga a elegir cuál se pierde. El destino vacío hereda la
-   base — "busca leads" sin decir dónde quiere decir "donde estoy" — pero al
-   revés no: buscar clientes en Miami no significa estar en Miami.
+   TWO places, not one. You live in one place and sell in another, and putting
+   them in a single field forces you to choose which one to lose. An empty
+   target inherits the base — "find leads" without saying where means "where I
+   am" — but not the other way round: looking for clients in Miami doesn't
+   mean being in Miami.
 
-   El valor vive arriba (en el chat) y no aquí dentro: el chat manda la
-   ubicación con cada mensaje, así que se puede cambiar para UNA consulta sin
-   guardarla. El botón de guardar es lo que la convierte en la de siempre. */
+   The value lives up in the chat, not in here: the chat sends the location
+   with every message, so it can be changed for ONE query without saving it.
+   The save button is what makes it the default. */
 
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
 import { PAISES, FRECUENTES, nombrePais } from './paises.js';
+import { t, registrar } from './i18n.js';
+
+registrar({
+  'Country': 'País', 'Country…': 'País…', 'City': 'Ciudad', 'not set': 'sin definir',
+  '{base} · searching in {target}': '{base} · busca en {target}',
+  'not set — the agent will search wherever it likes': 'sin definir — el agente buscará donde le parezca',
+  'Saved. It will be used in the next queries.': 'Guardada. Se usará en las próximas consultas.',
+  'Could not save it: {msg}': 'No pude guardarla: {msg}', 'Asking from': 'Consulto desde',
+  'Your area: the time zone and market you ask from.': 'Tu zona: huso horario y mercado desde el que preguntas.',
+  'Search for leads in': 'Buscar leads en', 'Leave it empty to search where you are.': 'Déjalo vacío para buscar donde estás.',
+  'Saving…': 'Guardando…', 'Save as default': 'Guardar como predeterminada',
+  'Without saving, the change only applies to the next message.': 'Sin guardar, el cambio vale solo para el próximo mensaje.',
+  'Location': 'Ubicación',
+});
 
 const VACIA = { base: { city: '', country: '' }, target: { city: '', country: '' } };
 
@@ -22,9 +37,8 @@ export function textoDe(sitio) {
   return sitio.city || p;
 }
 
-/* Carga la ubicación guardada una sola vez y la deja en manos de quien la
-   use. Devuelve también el guardar, para que el componente no tenga que
-   saber de rutas. */
+/* Loads the saved location once and hands it to whoever uses it. It also
+   returns the setter, so the component doesn't need to know about routes. */
 export function useUbicacion() {
   const [ubic, setUbic] = useState(VACIA);
   const [ciudades, setCiudades] = useState([]);
@@ -42,8 +56,8 @@ export function useUbicacion() {
         setCiudades(d.ciudades || []);
         setCargada(true);
       })
-      /* Que no se pueda leer el ajuste no puede dejar sin chat: se sigue con
-         los campos vacíos, que es exactamente como estaba antes de esto. */
+      /* Failing to read the setting can't leave you without a chat: carry on
+         with empty fields, exactly how things were before this existed. */
       .catch(() => vivo && setCargada(true));
     return () => { vivo = false; };
   }, []);
@@ -54,8 +68,8 @@ export function useUbicacion() {
 function Pais({ value, onChange, id }) {
   const resto = PAISES.filter((p) => !FRECUENTES.includes(p.code));
   return (
-    <select id={id} value={value} onChange={(e) => onChange(e.target.value)} aria-label="País">
-      <option value="">País…</option>
+    <select id={id} value={value} onChange={(e) => onChange(e.target.value)} aria-label={t('Country')}>
+      <option value="">{t('Country…')}</option>
       {FRECUENTES.map((c) => <option key={c} value={c}>{nombrePais(c)}</option>)}
       <option disabled>──────────</option>
       {resto.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
@@ -73,10 +87,10 @@ function Sitio({ etiqueta, pista, sitio, onChange, idBase }) {
           list="apm-ciudades"
           value={sitio.city}
           onChange={(e) => onChange({ ...sitio, city: e.target.value })}
-          placeholder="Ciudad"
-          /* Escrita a mano y no elegida de una lista: "Bronx, NY" y "Newark,
-             NJ" son las dos cosas que hacen falta, y ninguna base de ciudades
-             gratis las tiene bien a la vez. */
+          placeholder={t('City')}
+          /* Typed by hand, not picked from a list: "Bronx, NY" and "Newark,
+             NJ" are the two things needed, and no free city database gets
+             both right at once. */
           maxLength={80}
         />
         <Pais value={sitio.country} onChange={(c) => onChange({ ...sitio, country: c })}
@@ -93,17 +107,17 @@ export default function Ubicacion({ ubic, setUbic, ciudades, compacto = true }) 
 
   const destino = ubic.target.city || ubic.target.country ? ubic.target : ubic.base;
   const resumen = textoDe(ubic.base) || textoDe(ubic.target)
-    ? `${textoDe(ubic.base) || 'sin definir'} · busca en ${textoDe(destino) || 'sin definir'}`
-    : 'sin definir — el agente buscará donde le parezca';
+    ? t('{base} · searching in {target}', { base: textoDe(ubic.base) || t('not set'), target: textoDe(destino) || t('not set') })
+    : t('not set — the agent will search wherever it likes');
 
   async function guardar() {
     setGuardando(true);
     setAviso(null);
     try {
       await api('/api/location', { method: 'PUT', body: JSON.stringify(ubic) });
-      setAviso('Guardada. Se usará en las próximas consultas.');
+      setAviso(t('Saved. It will be used in the next queries.'));
     } catch (e) {
-      setAviso(`No pude guardarla: ${e.message}`);
+      setAviso(t('Could not save it: {msg}', { msg: e.message }));
     } finally {
       setGuardando(false);
     }
@@ -111,32 +125,32 @@ export default function Ubicacion({ ubic, setUbic, ciudades, compacto = true }) 
 
   const cuerpo = (
     <div className="ubicacion-cuerpo">
-      {/* Un solo datalist para los dos campos: dos elementos con el mismo id
-          no es cosa de estilo — el navegador se queda con uno y el otro campo
-          deja de sugerir sin decir nada. */}
+      {/* One datalist for both fields: two elements with the same id isn't a
+          style issue — the browser keeps one and the other field silently
+          stops suggesting. */}
       <datalist id="apm-ciudades">
         {ciudades.map((c) => <option key={c} value={c} />)}
       </datalist>
       <Sitio
-        etiqueta="Consulto desde"
-        pista="Tu zona: huso horario y mercado desde el que preguntas."
+        etiqueta={t('Asking from')}
+        pista={t('Your area: the time zone and market you ask from.')}
         sitio={ubic.base}
         onChange={(s) => setUbic({ ...ubic, base: s })}
         idBase="base"
       />
       <Sitio
-        etiqueta="Buscar leads en"
-        pista="Déjalo vacío para buscar donde estás."
+        etiqueta={t('Search for leads in')}
+        pista={t('Leave it empty to search where you are.')}
         sitio={ubic.target}
         onChange={(s) => setUbic({ ...ubic, target: s })}
         idBase="target"
       />
       <div className="controles">
         <button className="btn ghost" type="button" onClick={guardar} disabled={guardando}>
-          {guardando ? 'Guardando…' : 'Guardar como predeterminada'}
+          {guardando ? t('Saving…') : t('Save as default')}
         </button>
         <span className="pista">
-          Sin guardar, el cambio vale solo para el próximo mensaje.
+          {t('Without saving, the change only applies to the next message.')}
         </span>
       </div>
       {aviso && <p className="pista">{aviso}</p>}
@@ -148,7 +162,7 @@ export default function Ubicacion({ ubic, setUbic, ciudades, compacto = true }) 
   return (
     <details className="ubicacion">
       <summary>
-        <span className="etiqueta">Ubicación</span>
+        <span className="etiqueta">{t('Location')}</span>
         <span className="mono">{resumen}</span>
       </summary>
       {cuerpo}

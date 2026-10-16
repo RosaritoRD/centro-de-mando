@@ -1,12 +1,18 @@
-/* Áreas y proyectos — Fase 5.
+/* Areas and projects — Phase 5.
 
-   Comprueba desde FUERA que las URLs públicas responden. El vigilante del
-   host mira contenedores por dentro; esto mira lo que ve un usuario. Un
-   contenedor sano detrás de un proxy roto sigue siendo un sitio caído, y esa
-   diferencia es justo la que se paga cara. */
+   Checks from the OUTSIDE that the public URLs respond. The host watchdog
+   looks at containers from the inside; this looks at what a user sees. A
+   healthy container behind a broken proxy is still a site that's down, and
+   that difference is exactly the expensive one. */
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.js';
+import { t, registrar } from './i18n.js';
+
+registrar({
+  'Loading…': 'Cargando…', 'Checking…': 'Comprobando…', 'Check now': 'Comprobar ahora',
+  'no data': 'sin datos', 'up': 'arriba', 'down': 'caído',
+});
 
 export default function Areas({ refresco = 0 }) {
   const [lista, setLista] = useState(null);
@@ -18,9 +24,9 @@ export default function Areas({ refresco = 0 }) {
     catch (e) { setAviso(e.message); }
   }, []);
 
-  /* Se recarga con el botón de actualizar del panel. Ojo: esto relee lo que
-     el vigilante ya sondeó (cada 10 min); para forzar un sondeo nuevo está
-     "Comprobar ahora". */
+  /* Reloaded with the dashboard's refresh button. Note: this re-reads what the
+     watchdog already probed (every 10 min); to force a new probe there's
+     "Check now". */
   useEffect(() => { cargar(); }, [cargar, refresco]);
 
   async function comprobarAhora() {
@@ -30,7 +36,7 @@ export default function Areas({ refresco = 0 }) {
     finally { setOcupado(false); }
   }
 
-  if (lista === null) return <div className="empty">Cargando…</div>;
+  if (lista === null) return <div className="empty">{t('Loading…')}</div>;
 
   const areas = [...new Set(lista.map((p) => p.area))];
 
@@ -39,7 +45,7 @@ export default function Areas({ refresco = 0 }) {
       {aviso && <div className="aviso">{aviso}</div>}
       <div className="controles" style={{ marginBottom: 12 }}>
         <button className="btn" onClick={comprobarAhora} disabled={ocupado}>
-          {ocupado ? 'Comprobando…' : 'Comprobar ahora'}
+          {ocupado ? t('Checking…') : t('Check now')}
         </button>
       </div>
 
@@ -50,13 +56,13 @@ export default function Areas({ refresco = 0 }) {
             {lista.filter((p) => p.area === a).map((p) => (
               <div key={p.id} className="fila">
                 <span className={'chip ' + (!p.ultimo ? '' : p.ultimo.ok ? 'ok' : 'bad')}>
-                  {!p.ultimo ? 'sin datos' : p.ultimo.ok ? 'arriba' : 'caído'}
+                  {!p.ultimo ? t('no data') : p.ultimo.ok ? t('up') : t('down')}
                 </span>
                 <span className="titulo">{p.name}</span>
                 <span className="mono">
                   {p.ultimo
-                    /* El motivo del fallo importa más que el código: "sin
-                       respuesta en 8s" y "500" se arreglan de forma distinta. */
+                    /* The failure reason matters more than the code: "no
+                       response within 8s" and "500" are fixed differently. */
                     ? (p.ultimo.ok ? `${p.ultimo.status} · ${p.ultimo.ms} ms`
                                    : (p.ultimo.error || p.ultimo.status))
                     : '—'}

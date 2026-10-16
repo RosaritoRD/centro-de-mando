@@ -1,8 +1,8 @@
-/* Ventana horaria para llamar: 8:00 a 21:00 en la hora LOCAL del lead.
+/* Calling window: 8:00 to 21:00 in the lead's LOCAL time.
 
-   Es la regla de la TCPA (47 CFR 64.1200(c)(1)). Se calcula en la zona del
-   lead y no en la del servidor (UTC) ni en la de quien llama: la hora que
-   cuenta es la del que recibe la llamada. */
+   It's the TCPA rule (47 CFR 64.1200(c)(1)). Computed in the lead's time zone,
+   not the server's (UTC) or the caller's: the time that counts is the time of
+   whoever receives the call. */
 
 import { partesLocales as horaLocal, horaEnZona } from './tz.js';
 
@@ -14,7 +14,7 @@ export function dentroDeHorario(ahora, zona = 'America/New_York') {
   return h >= ABRE && h < CIERRA;
 }
 
-/** Cuándo se puede volver a llamar si ahora está fuera de horario. */
+/** When you can call again if it's currently outside the window. */
 export function proximaApertura(ahora, zona = 'America/New_York') {
   const local = horaLocal(ahora, zona);
   if (local.h < ABRE) return horaEnZona(local.y, local.m, local.d, ABRE, 0, zona);
