@@ -1,6 +1,6 @@
 /* Call prospecting (Phase 3). Spec: .planning/specs/apm-prospeccion-llamadas.md
 
-   Built for the thumb: the owner calls from HIS phone (tel: link) and here he only
+   Built for the thumb: the owner calls from THEIR own phone (tel: link) and here only
    marks what happened with big buttons, writes a note and decides whether to
    call back. No auto-dialer and no AI voice (TCPA).
 

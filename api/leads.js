@@ -2,7 +2,7 @@
 
    Spec: .planning/specs/apm-prospeccion-llamadas.md
    - Leads from NYC Open Data (main, legal) and Google Maps (soft, internal only).
-   - the owner ALWAYS dials from his own phone: there's no dialer or AI voice here (TCPA).
+   - the owner ALWAYS dials from their own phone: there's no dialer or AI voice here (TCPA).
    - Each call = an append-only row with outcome, note and whether to call back.
 
    Injected dependencies (repo, sources, clock) so the routes can be tested

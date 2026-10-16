@@ -105,7 +105,7 @@ export function lineasDeUbicacion(u) {
   const base = comoTexto(u.base);
   const target = comoTexto(u.target);
   const l = [];
-  if (base) l.push(`the owner is asking from ${base}: that is his time zone and his market.`);
+  if (base) l.push(`the owner is asking from ${base}: that is their time zone and market.`);
   if (target) {
     l.push(`When you look for prospects, businesses, competitors or prices,`
       + ` focus on ${target}.`);

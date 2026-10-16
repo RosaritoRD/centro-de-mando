@@ -2,7 +2,7 @@
 
    This is the flow that defines the product (docs/ARCHITECTURE.md §2):
    a run that can STOP to ask for permission, survive hours and a redeploy,
-   and continue when the owner approves from his phone.
+   and continue when the owner approves from a phone.
 
    The three non-negotiable invariants:
 
