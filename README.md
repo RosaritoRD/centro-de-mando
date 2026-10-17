@@ -59,7 +59,7 @@ flowchart LR
 **You need:** Docker, a Postgres database, a Firebase project (for login) and an Anthropic API key.
 
 ```bash
-git clone https://github.com/RosaritoRD/centro-de-mando.git
+git clone https://github.com/RosaritoRD/command-center.git
 cd centro-de-mando
 cp .env.example .env            # fill in every value (see below)
 docker compose up -d --build
@@ -103,7 +103,7 @@ Open the folder with `claude` or `codex`. Start from `docs/ARCHITECTURE.md` and 
 See **[SAVINGS-AND-TIPS.md](SAVINGS-AND-TIPS.md)**.
 
 ## 🤝 Contributing
-Issues and PRs are welcome — look for the [`good first issue`](https://github.com/RosaritoRD/centro-de-mando/labels/good%20first%20issue) label and read [CONTRIBUTING.md](CONTRIBUTING.md). Questions and ideas go in [Discussions](https://github.com/RosaritoRD/centro-de-mando/discussions).
+Issues and PRs are welcome — look for the [`good first issue`](https://github.com/RosaritoRD/command-center/labels/good%20first%20issue) label and read [CONTRIBUTING.md](CONTRIBUTING.md). Questions and ideas go in [Discussions](https://github.com/RosaritoRD/command-center/discussions).
 
 ## ⚖️ Responsible use
 Respect each data source's terms and commercial-contact laws (CAN-SPAM, TCPA). This project **never sends anything without your explicit approval** — keep it that way.
